@@ -227,53 +227,58 @@
                  (gen/not-empty)
                  (gen/vector num-threads))]
     (println "\nConcurrent check iteration starting...")
-    (let [worlds (interleavings op-seqs)]
-      (printf "Generated %d worldlines with %d ops across %d threads:\n"
-              (count worlds)
+    (let [op-seqs (map (fn [op-seq thread-idx]
+                         (map #(assoc %1 ::thread thread-idx ::rank %2)
+                               op-seq
+                               (range)))
+                       op-seqs
+                       (range))
+          worlds (interleavings op-seqs)]
+      (printf "Generated %s worldlines with %d ops across %d threads:\n"
+              (let [head (count (take 1001 worlds))]
+                (if (= 1001 head) "1000+" head))
               (count (apply concat op-seqs))
               num-threads)
       (run! prn op-seqs)
-      (->>
-        (range repetitions)
-        (map
-          (fn run-tests!
-            [i]
+      (loop [i 0]
+        (if (<= repetitions i)
+          true
+          (do
             (println "Test repetition" (inc i))
             (let [system (constructor)]
-              (try
-                (let [start (System/nanoTime)
-                      thread-results (run-threads! system op-seqs)
-                      elapsed (/ (- (System/nanoTime) start) 1000000.0)
-                      _ (printf "Ran tests in %.2f ms\n" elapsed)
-                      op-results (into {}
-                                       (comp cat (map (juxt #(System/identityHashCode (first %))
-                                                            second)))
-                                       thread-results)
-                      world->results (fn [world]
-                                       (map (juxt identity #(op-results (System/identityHashCode %)))
-                                            world))
-                      check-worldline (fn check-worldline
-                                        [world]
-                                        (let [results (world->results world)]
-                                          (binding [ctest/report (constantly nil)]
-                                            (when (valid-results? (init-model context) results)
-                                              results))))
-                      _ (println "Searching for valid linearization...")
-                      start (System/nanoTime)
-                      valid-world (some identity (pmap check-worldline worlds))
-                      elapsed (/ (- (System/nanoTime) start) 1000000.0)]
-                  ; Run one last time, either with the valid world or fail on
-                  ; the first world.
-                  (valid-results?
-                    (init-model context)
-                    (if valid-world
-                      (do (printf "Found valid world in %.2f ms\n" elapsed)
-                          valid-world)
-                      (let [results (world->results (first worlds))]
-                        (printf "Exhausted worldlines after %.2f ms\n%s\n"
-                                elapsed (pr-str results))
-                        results))))
-                (finally
-                  (when on-stop
-                    (on-stop system)))))))
-        (every? true?)))))
+              (if (try
+                    (let [start (System/nanoTime)
+                          thread-results (run-threads! system op-seqs)
+                          elapsed (/ (- (System/nanoTime) start) 1000000.0)
+                          _ (printf "Ran tests in %.2f ms\n" elapsed)
+                          op-results (into {}
+                                           (comp cat (map (juxt (comp (juxt ::thread ::rank) first) second)))
+                                           thread-results)
+                          world->results (fn [world]
+                                           (map (juxt identity (comp op-results (juxt ::thread ::rank))) world))
+                          check-worldline (fn check-worldline
+                                            [world]
+                                            (let [results (world->results world)]
+                                              (binding [ctest/report (constantly nil)]
+                                                (when (valid-results? (init-model context) results)
+                                                  results))))
+                          _ (println "Searching for valid linearization...")
+                          start (System/nanoTime)
+                          valid-world (some identity (pmap check-worldline worlds))
+                          elapsed (/ (- (System/nanoTime) start) 1000000.0)]
+                      ; Run one last time, either with the valid world or fail on
+                      ; the first world.
+                      (valid-results?
+                        (init-model context)
+                        (if valid-world
+                          (do (printf "Found valid world in %.2f ms\n" elapsed)
+                              valid-world)
+                          (let [results (world->results (first worlds))]
+                            (printf "Exhausted worldlines after %.2f ms\n%s\n"
+                                    elapsed (pr-str results))
+                            results))))
+                  (finally
+                    (when on-stop
+                      (on-stop system))))
+                (recur (inc i))
+                false))))))))

@@ -49,13 +49,13 @@
     (swap! system assoc k v)
     v)
 
-  (update-model
-    [this model]
-    (assoc model k v))
-
   (check
     [this model result]
-    (is (= v result))))
+    (is (= v result)))
+
+  (update-model
+    [this model]
+    (assoc model k v)))
 
 
 (defop RemoveEntry

@@ -14,21 +14,24 @@
     [operation system]
     "Apply the operation to the system, returning a result value.")
 
-  (update-model
-    [operation model]
-    "Apply an update to the model based on the operation.")
-
   (check
     [operation model result]
     "Validate an operation given the model state and the response from the
     system being tested. May include `clojure.test/is` assertions, and should
-    return a boolean value indicating overall success or failure."))
+    return a boolean value indicating overall success or failure.")
+
+  (update-model
+    [operation model]
+    "Apply an update to the model based on the operation."))
 
 
 (defmacro defop
   "Defines a new specification for a system operation test."
   [op-name attr-vec & forms]
   (let [defined (zipmap (map first forms) forms)]
+    (when-let [unknown-forms (seq (dissoc defined 'gen-args 'apply-op 'check 'update-model))]
+      (throw (ex-info "Unknown forms defined in operation body"
+                      {:unknown (map first unknown-forms)})))
     `(do
        (defrecord ~op-name
          ~attr-vec
@@ -36,8 +39,8 @@
          TestOperation
 
          ~(or (defined 'apply-op) '(apply-op [op system] nil))
-         ~(or (defined 'update-model) '(update-model [op model] model))
-         ~(or (defined 'check) '(check [op model result] true)))
+         ~(or (defined 'check) '(check [op model result] true))
+         ~(or (defined 'update-model) '(update-model [op model] model)))
 
        (defn ~(symbol (str "gen->" (name op-name)))
          ~(str "Constructs a " (name op-name) " operation generator.")

@@ -99,7 +99,7 @@
     :iterations 10))
 
 
-(deftest concurrent-test
+(deftest ^:concurrent concurrent-test
   (carly/check-system-concurrent
     "concurrent store tests"
     #(atom (sorted-map))

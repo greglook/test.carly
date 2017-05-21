@@ -10,4 +10,8 @@
   :dependencies
   [[org.clojure/clojure "1.8.0"]
    [org.clojure/test.check "0.9.0"]
-   [com.gfredericks/test.chuck "0.2.7"]])
+   [com.gfredericks/test.chuck "0.2.7"]]
+
+  :test-selectors
+  {:default (complement :concurrent)
+   :concurrent :concurrent})

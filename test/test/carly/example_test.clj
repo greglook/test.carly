@@ -5,9 +5,13 @@
     [test.carly.core :as carly :refer [defop]]))
 
 
+;; The simplest possible operation is one that has no settings, does nothing,
+;; does not affect the model, and performs no checking logic.
 (defop NoOp [])
 
-
+;; Here we define a no-parameter operation which reads from the system. It does
+;; not change the model state, but does check that the system returned the
+;; expected results.
 (defop ListKeys
   []
 
@@ -17,9 +21,11 @@
 
   (check
     [this model result]
-    (is (= (keys model) result))))
+    (is (= (not-empty (sort (keys model))) result))))
 
-
+;; This operation specifies a key to lookup in the store, so it defines a
+;; `gen-args` form. By returning a vector, the positional generators are used
+;; to select a value for each field in the operation.
 (defop GetEntry
   [k]
 
@@ -35,7 +41,10 @@
     [this model result]
     (is (= (get model k) result))))
 
-
+;; Put is a side-effecting entry, so it defines an `update-model` method. This
+;; returns an updated version of the model state after applying the operation.
+;; This op also shows another way to generate args, by specifying a map of field
+;; keys to value generators.
 (defop PutEntry
   [k v]
 
@@ -57,7 +66,9 @@
     [this model]
     (assoc model k v)))
 
-
+;; Remove is also side-effecting, but does not define any checking logic. It
+;; generates a map of args with a full generator expression, which is passed
+;; to the record's map constructor.
 (defop RemoveEntry
   [k]
 
@@ -74,14 +85,13 @@
     [this model]
     (dissoc model k)))
 
-
-(defn op-generators
-  [context]
-  [(gen->NoOp context)
-   (gen->ListKeys context)
-   (gen->GetEntry context)
-   (gen->PutEntry context)
-   (gen->RemoveEntry context)])
+(def op-generators
+  "Returns a vector of operation generators when called with the test context."
+  (juxt gen->NoOp
+        gen->ListKeys
+        gen->GetEntry
+        gen->PutEntry
+        gen->RemoveEntry))
 
 
 (def gen-context

@@ -42,7 +42,7 @@
   (gen-args
     [context]
     {:k (gen/elements (:keys context))
-     :v gen/any-printable})
+     :v gen/large-integer})
 
   (apply-op
     [this system]
@@ -84,10 +84,26 @@
    (gen->RemoveEntry context)])
 
 
+(def gen-context
+  "Generator for test contexts; this gives the set of possible keys to use in
+  operations."
+  (gen/hash-map :keys (gen/set (gen/fmap (comp keyword str) gen/char-alpha) {:min-elements 1})))
+
+
 (deftest store-test
   (carly/check-system
     "basic store tests"
-    #(atom {})
+    #(atom (sorted-map))
     (comp gen/one-of op-generators)
-    :context-gen (gen/hash-map :keys (gen/set gen/keyword {:min-elements 1}))
+    :context-gen gen-context
     :iterations 10))
+
+
+(deftest concurrent-test
+  (carly/check-system-concurrent
+    "concurrent store tests"
+    #(atom (sorted-map))
+    (comp gen/one-of op-generators)
+    :context-gen gen-context
+    :iterations 10
+    :repetitions 5))

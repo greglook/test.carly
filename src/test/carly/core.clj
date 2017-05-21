@@ -138,15 +138,15 @@
   sequence of operations.
 
   Takes a test message, a no-arg constructor function which will produce a new
-  system for testing, and a function which will return an operation generator
-  when called with the test context. The remaining options control the behavior
-  of the tests:
+  system for testing, and a function which will return a vector of operation
+  generators when called with the test context. The remaining options control
+  the behavior of the tests:
 
   - `context-gen` generator for the operation test context
   - `init-model`  function which returns a fresh model when called with the context
   - `iterations`  number of generative tests to perform
   - `on-stop`     side-effecting function to call on the system after testing"
-  [message constructor op-gen
+  [message constructor op-generators
    & {:keys [context-gen init-model iterations on-stop]
       :or {context-gen (gen/return {})
            init-model (constantly {})
@@ -154,7 +154,7 @@
   {:pre [(fn? constructor)]}
   (checking message (chuck/times iterations)
     [context context-gen
-     ops (gen/not-empty (gen/list (op-gen context)))]
+     ops (gen/not-empty (gen/list (gen/one-of (op-generators context))))]
     (let [system (constructor)]
       (try
         (valid-results?
@@ -198,9 +198,9 @@
   threads of operations.
 
   Takes a test message, a no-arg constructor function which will produce a new
-  system for testing, and a function which will return an operation generator
-  when called with the test context. The remaining options control the behavior
-  of the tests:
+  system for testing, and a function which will return a vector of operation
+  generators when called with the test context. The remaining options control
+  the behavior of the tests:
 
   - `context-gen` generator for the operation test context
   - `init-model`  function which returns a fresh model when called with the context
@@ -210,7 +210,7 @@
   - `on-stop`     side-effecting function to call on the system after testing
 
   Returns the results of the generative tests."
-  [message constructor op-gen
+  [message constructor op-generators
    & {:keys [context-gen init-model iterations repetitions max-threads on-stop]
       :or {context-gen (gen/return {})
            init-model (constantly {})
@@ -221,8 +221,9 @@
   (checking message (chuck/times iterations)
     [context context-gen
      num-threads (gen/choose 2 max-threads)
-     op-seqs (-> (gen/frequency [[1 (gen->Wait context)]
-                                 [9 (op-gen context)]])
+     op-seqs (-> (gen->Wait context)
+                 (cons (op-generators context))
+                 (gen/one-of)
                  (gen/list)
                  (gen/not-empty)
                  (gen/vector num-threads))]

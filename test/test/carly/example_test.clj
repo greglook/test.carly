@@ -94,16 +94,16 @@
   (carly/check-system
     "basic store tests"
     #(atom (sorted-map))
-    (comp gen/one-of op-generators)
+    op-generators
     :context-gen gen-context
-    :iterations 10))
+    :iterations 20))
 
 
 (deftest ^:concurrent concurrent-test
   (carly/check-system-concurrent
     "concurrent store tests"
     #(atom (sorted-map))
-    (comp gen/one-of op-generators)
+    op-generators
     :context-gen gen-context
     :iterations 10
     :repetitions 5))

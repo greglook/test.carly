@@ -19,6 +19,8 @@ Leiningen, add the following dependency to your project definition:
 
 **TODO**
 
+For a full example, see the [example tests](test/test/carly/example_test.clj).
+
 
 ## License
 

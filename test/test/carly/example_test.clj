@@ -1,4 +1,4 @@
-(ns test.carly.core-test
+(ns test.carly.example-test
   (:require
     [clojure.test :refer :all]
     [clojure.test.check.generators :as gen]

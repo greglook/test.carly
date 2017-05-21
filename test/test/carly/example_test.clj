@@ -85,6 +85,7 @@
     [this model]
     (dissoc model k)))
 
+
 (def op-generators
   "Returns a vector of operation generators when called with the test context."
   (juxt gen->NoOp

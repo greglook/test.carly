@@ -23,9 +23,9 @@
 (defop GetEntry
   [k]
 
-  (generate
+  (gen-args
     [context]
-    (gen/hash-map :k (gen/elements (:keys context))))
+    [(gen/elements (:keys context))])
 
   (apply-op
     [this system]
@@ -39,11 +39,10 @@
 (defop PutEntry
   [k v]
 
-  (generate
+  (gen-args
     [context]
-    (gen/hash-map
-      :k (gen/elements (:keys context))
-      :v gen/any-printable))
+    {:k (gen/elements (:keys context))
+     :v gen/any-printable})
 
   (apply-op
     [this system]
@@ -62,7 +61,7 @@
 (defop RemoveEntry
   [k]
 
-  (generate
+  (gen-args
     [context]
     (gen/hash-map :k (gen/elements (:keys context))))
 
@@ -78,11 +77,11 @@
 
 (defn op-generators
   [context]
-  [(gen-NoOp-op context)
-   (gen-ListKeys-op context)
-   (gen-GetEntry-op context)
-   (gen-PutEntry-op context)
-   (gen-RemoveEntry-op context)])
+  [(gen->NoOp context)
+   (gen->ListKeys context)
+   (gen->GetEntry context)
+   (gen->PutEntry context)
+   (gen->RemoveEntry context)])
 
 
 (deftest store-test

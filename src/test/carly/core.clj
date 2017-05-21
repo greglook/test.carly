@@ -39,13 +39,25 @@
          ~(or (defined 'update-model) '(update-model [op model] model))
          ~(or (defined 'check) '(check [op model result] true)))
 
-       (defn ~(symbol (str "gen-" (name op-name) "-op"))
+       (defn ~(symbol (str "gen->" (name op-name)))
          ~(str "Constructs a " (name op-name) " operation generator.")
-         ~@(if-let [[_ args & body] (defined 'generate)]
+         ~@(if-let [[_ args & body] (defined 'gen-args)]
              [args
-              `(gen/fmap
-                 ~(symbol (str "map->" (name op-name)))
-                 (do ~@body))]
+              (cond
+                (and (= 1 (count body))
+                     (vector? (first body)))
+                  `(gen/fmap
+                     (partial apply ~(symbol (str "->" (name op-name))))
+                     (gen/tuple ~@(first body)))
+                (and (= 1 (count body))
+                     (map? (first body)))
+                  `(gen/fmap
+                     ~(symbol (str "map->" (name op-name)))
+                     (gen/hash-map ~@(apply concat (first body))))
+                :else
+                  `(gen/fmap
+                     ~(symbol (str "map->" (name op-name)))
+                     (do ~@body)))]
              [['context]
               `(gen/return (~(symbol (str "->" (name op-name)))))])))))
 

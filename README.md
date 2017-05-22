@@ -6,6 +6,11 @@ stateful systems under a sequence of random operations. You specify the types of
 operations and model the expected system behavior, and `test.carly` explores the
 input space to try to discover violations.
 
+This project is inspired by Aphyr's excellent
+[Jepsen](https://aphyr.com/tags/Jepsen) project as well as Eric Normand's 2017
+Clojure/West Talk, [Testing Stateful and Concurrent Systems Using
+test.check](https://www.youtube.com/watch?v=r5i_OiZw6Sw).
+
 
 ## Installation
 

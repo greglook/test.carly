@@ -103,6 +103,18 @@ generate a context which provides a fixed set of keys to choose from:
                                {:min-elements 1})))
 ```
 
+The context is passed to a function which should return a vector of generators
+for the operations under test. We can construct one easily using the generator
+constructors produced by `defop`:
+
+```clojure
+(def op-generators
+  (juxt gen->ListKeys
+        gen->GetEntry
+        gen->PutEntry
+        gen->RemoveEntry))
+```
+
 Finally, we can define a linear test harness to exercise the store:
 
 ```clojure

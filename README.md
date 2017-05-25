@@ -127,6 +127,21 @@ Finally, we can define a linear test harness to exercise the store:
     :iterations 20))
 ```
 
+Of course, the real power is testing concurrently; to do so, use the related
+`check-system-concurrent` test function:
+
+```clojure
+(deftest ^:concurrent concurrent-test
+  (carly/check-system-concurrent
+    "concurrent store tests"
+    #(atom (sorted-map))
+    op-generators
+    :context-gen gen-context
+    :max-concurrency 4
+    :repetitions 5
+    :iterations 20))
+```
+
 For a full example, see the [example tests](test/test/carly/example_test.clj).
 
 

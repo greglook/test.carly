@@ -104,29 +104,119 @@
 
 ;; ## Concurrent Test
 
-(defn- thread-children
-  "Calculates child nodes for a set of possible operation interleavings."
-  [{:keys [ordering threads]}]
-  (map
-    (fn [[i [op & more]]]
-      {:ordering (conj ordering op)
-       :threads (if (seq more)
-                  (assoc threads i more)
-                  (dissoc threads i))})
-    threads))
+(defn- compare-futures
+  "Ranks two worlds by the number of possible futures they have. Worlds with
+  fewer futures will rank earlier."
+  [a b]
+  (compare (:futures a) (:futures b)))
 
 
-(defn interleavings
-  "Calculate a lazy sequence of all possible interleavings of the given
-  sequences."
-  [op-seqs]
-  (let [threads (into {} (map vector (range) op-seqs))
-        branch? (comp not-empty :threads)]
-    (->>
-      {:ordering [], :threads threads}
-      (tree-seq branch? thread-children)
-      (remove branch?)
-      (map :ordering))))
+(defn- spawn-worker
+  "Poll the queue for a world, calculate next states, and add valid ones back
+  into the queue. The `result` promise will be delivered with the first valid
+  terminal world found. One `result` has been realized, the loop will exit."
+  [^PriorityBlockingQueue queue visited result]
+  (future
+    (loop []
+      (when-not (realized? result)
+        (if-let [world (.poll queue 1 TimeUnit/SECONDS)]
+          (do
+            (when-not (contains? @visited (world/visit-key world))
+              ; Add world to visited set.
+              (swap! visited conj (world/visit-key world))
+              ; Compute steps.
+              (let [start (System/nanoTime)
+                    value
+              (binding [ctest/report (constantly nil)]
+                (if (<= (:futures world) 1)
+                  ; Optimization to run the linear sequence directly when there is only one
+                  ; possible future worldline.
+                  (when-let [end (world/run-linear world)]
+                    (deliver result end))
+                  ; Otherwise, calculate the next possible states and add any unvisited
+                  ; ones to the queue.
+                  (->> (world/next-steps world)
+                       (remove (comp @visited world/visit-key))
+                       (run! #(.offer queue %)))))]
+                ;(printf "Work task %.3f ms\n" (/ (- (System/nanoTime) start) 1000000.0))
+                ;(flush)
+                value))
+            (recur))
+          ; Didn't find a world; if the queue is still empty, deliver nil.
+          (when (empty? queue)
+            (deliver result nil)))))))
+
+
+(defn- run-workers!
+  "Run a collection of worker threads to consume the given queue of worlds.
+  Blocks and returns the first valid world found, or nil, once all the threads
+  have terminated."
+  [n queue visited]
+  (when-not (empty? queue)
+    (println "Running" n "workers to search worldlines...")
+    (let [result (promise)
+          workers (repeatedly n #(spawn-worker queue visited result))]
+      (dorun workers)
+      (run! deref workers)
+      (if (empty? queue)
+        (println "Work queue is empty!")
+        (println "Work queue has" (count queue) "remaining states"))
+      @result)))
+
+
+(defn- run-test-iteration
+  [constructor init-model context op-seqs search-threads on-stop]
+  (let [system (constructor)]
+    (try
+      (let [start (System/nanoTime)
+            thread-results (op/run-threads! system op-seqs)
+            elapsed (/ (- (System/nanoTime) start) 1000000.0)
+            _ (do (printf "Ran operations in %.2f ms\n" elapsed) (flush))
+            start (System/nanoTime)
+            origin (world/initialize (init-model context) thread-results)
+            visited (atom #{})
+            queue (PriorityBlockingQueue. 20 compare-futures)]
+        (printf "Initialized world in %.3f ms. Searching for valid linearization among %s worldlines...\n"
+                (/ (- (System/nanoTime) start) 1000000.0)
+                (:futures origin))
+        (flush)
+        (.offer queue origin)
+        (let [start (System/nanoTime)
+              valid-world (run-workers! search-threads queue visited)
+              elapsed (/ (- (System/nanoTime) start) 1000000.0)]
+          (if valid-world
+            (let [message (format "Found valid worldline in %.2f ms after visiting %d worlds"
+                                  elapsed (count @visited))]
+              (println message)
+              ;(prn (:history valid-world))
+              (flush)
+              (let [valid-history? (loop [model (init-model context)
+                                          ops (:history valid-world)]
+                                     (if-let [op (first ops)]
+                                       (if (op/check op model (::op/result op))
+                                         (recur (op/update-model op model) (rest ops))
+                                         false)
+                                       true))]
+                (ctest/is valid-history?))
+              (ctest/do-report
+                {:type :pass
+                 :message message
+                 :expected 'linearizable
+                 :actual (:history valid-world)})
+              true)
+            (let [message (format "Exhausted worldlines in %.2f ms after visiting %d worlds"
+                                  elapsed (count @visited))]
+              (println message)
+              (flush)
+              (ctest/do-report
+                {:type :fail
+                 :message message
+                 :expected 'linearizable
+                 :actual thread-results})
+              false))))
+      (finally
+        (when on-stop
+          (on-stop system))))))
 
 
 (defn check-system-concurrent
@@ -142,80 +232,39 @@
   - `init-model`  function which returns a fresh model when called with the context
   - `iterations`  number of generative tests to perform
   - `repetitions` number of times to run per generation to ensure repeatability
-  - `max-threads` maximum number of threads to run in parallel
+  - `max-concurrency` maximum number of operation threads to run in parallel
+  - `search-threads` number of threads to run to search for valid worldlines
   - `on-stop`     side-effecting function to call on the system after testing
 
   Returns the results of the generative tests."
   [message constructor op-generators
-   & {:keys [context-gen init-model iterations repetitions max-threads on-stop]
+   & {:keys [context-gen init-model iterations repetitions max-concurrency search-threads on-stop]
       :or {context-gen (gen/return {})
            init-model (constantly {})
            iterations 20
            repetitions 10
-           max-threads 4}}]
+           max-concurrency 4
+           search-threads (. (Runtime/getRuntime) availableProcessors)}}]
   {:pre [(fn? constructor)]}
   (checking message (chuck/times iterations)
     [context context-gen
-     num-threads (gen/choose 2 max-threads)
+     num-threads (gen/choose 2 max-concurrency)
      op-seqs (-> (gen->Wait context)
                  (cons (op-generators context))
                  (gen/one-of)
                  (gen/list)
                  (gen/not-empty)
                  (gen/vector num-threads))]
-    (println "\nConcurrent check iteration starting...")
-    (let [op-seqs (map (fn [op-seq thread-idx]
-                         (map #(assoc %1 ::thread thread-idx ::rank %2)
-                               op-seq
-                               (range)))
-                       op-seqs
-                       (range))
-          worlds (interleavings op-seqs)]
-      (printf "Generated %s worldlines with %d ops across %d threads:\n"
-              (let [head (count (take 1001 worlds))]
-                (if (= 1001 head) "1000+" head))
-              (count (apply concat op-seqs))
-              num-threads)
-      (run! prn op-seqs)
-      (loop [i 0]
-        (if (<= repetitions i)
-          true
-          (do
-            (println "Test repetition" (inc i))
-            (let [system (constructor)]
-              (if (try
-                    (let [start (System/nanoTime)
-                          thread-results (run-threads! system op-seqs)
-                          elapsed (/ (- (System/nanoTime) start) 1000000.0)
-                          _ (printf "Ran operations in %.2f ms\n" elapsed)
-                          op-results (into {}
-                                           (comp cat (map (juxt (comp (juxt ::thread ::rank) first) second)))
-                                           thread-results)
-                          world->results (fn [world]
-                                           (map (juxt identity (comp op-results (juxt ::thread ::rank))) world))
-                          check-worldline (fn check-worldline
-                                            [world]
-                                            (let [results (world->results world)]
-                                              (binding [ctest/report (constantly nil)]
-                                                (when (valid-results? (init-model context) results)
-                                                  results))))
-                          _ (println "Searching for valid linearization...")
-                          start (System/nanoTime)
-                          valid-world (some identity (pmap check-worldline worlds))
-                          elapsed (/ (- (System/nanoTime) start) 1000000.0)]
-                      ; Run one last time, either with the valid world or fail on
-                      ; the first world.
-                      (valid-results?
-                        (init-model context)
-                        (if valid-world
-                          (do (printf "Found valid world in %.2f ms\n" elapsed)
-                              valid-world)
-                          (let [results (world->results (first worlds))]
-                            (printf "Exhausted worldlines after %.2f ms\n%s\n"
-                                    elapsed (pr-str results))
-                            results))))
-                  (finally
-                    (when on-stop
-                      (on-stop system))))
-                (recur (inc i))
-                false))))))))
+    (printf "\nStarting test iteration of %d repetitions with %d ops across %d threads:\n"
+            repetitions
+            (count (apply concat op-seqs))
+            (count op-seqs))
+      #_(run! prn op-seqs)
+    (loop [i 0]
+      (if (<= repetitions i)
+        true
+        (do
+          (println "\nTest repetition" (inc i))
+          (if (run-test-iteration constructor init-model context op-seqs search-threads on-stop)
+            (recur (inc i))
+            false))))))

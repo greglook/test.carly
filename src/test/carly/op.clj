@@ -31,15 +31,6 @@
   "Applies a sequence of operations in a separate thread. Returns a promise for
   the results of the application."
   [latch system thread-id ops]
-  #_
-  (let [results (promise)]
-    (doto (Thread.
-            (fn apply-ops-thread []
-              @latch
-              (deliver results (apply-ops! system ops)))
-            (format "test.carly/%s/%d" (Integer/toHexString (hash system)) thread-id))
-      (.start))
-    results)
   (future @latch (apply-ops! system ops)))
 
 

@@ -6,10 +6,10 @@
     [test.carly.op :as op]))
 
 
-;; A world represents a point in time along a possible history. The model
-;; holds the current representation of the system, the history is the sequence
-;; of operations which have already happened, and pending is a map from thread
-;; ids to lists of pending operations for each thread.
+;; A world represents a point in time along a possible history. The `model`
+;; holds the current representation of the system, the `history` is the
+;; sequence of operations which have already happened, and `pending` is a map
+;; from thread ids to lists of pending operations for each thread.
 (defrecord World
   [model history pending futures])
 

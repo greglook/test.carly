@@ -5,27 +5,16 @@
     [clojure.test :as ctest]
     [clojure.test.check.generators :as gen]
     [com.gfredericks.test.chuck :as chuck]
-    [com.gfredericks.test.chuck.clojure-test :refer [checking]]))
+    [com.gfredericks.test.chuck.clojure-test :refer [checking]]
+    [test.carly.op :as op]
+    [test.carly.world :as world])
+  (:import
+    (java.util.concurrent
+      PriorityBlockingQueue
+      TimeUnit)))
 
 
-(defprotocol TestOperation
-  "Protocol for a test operation on a system."
-
-  (apply-op
-    [operation system]
-    "Apply the operation to the system, returning a result value.")
-
-  (check
-    [operation model result]
-    "Validate an operation given the model state and the response from the
-    system being tested. May include `clojure.test/is` assertions, and should
-    return a boolean value indicating overall success or failure.")
-
-  (update-model
-    [operation model]
-    "Apply an update to the model based on the operation."))
-
-
+; TODO: move to op ns?
 (defmacro defop
   "Defines a new specification for a system operation test."
   [op-name attr-vec & forms]
@@ -37,7 +26,7 @@
        (defrecord ~op-name
          ~attr-vec
 
-         TestOperation
+         op/TestOperation
 
          ~(or (defined 'apply-op) '(apply-op [op system] nil))
          ~(or (defined 'check) '(check [op model result] true))
@@ -79,129 +68,6 @@
 
 
 
-;; ## Operation Execution
-
-(defn apply-ops!
-  "Apply a sequence of operations to a system, returning a vector of pairs of
-  the operations with their results."
-  [system ops]
-  (mapv #(assoc %1
-                ::rank %2
-                ::result (apply-op %1 system))
-        ops
-        (range)))
-
-
-(defn run-ops!
-  "Applies a sequence of operations in a separate thread. Returns a promise for
-  the results of the application."
-  [latch system thread-id ops]
-  (let [results (promise)
-        ops (map #(assoc % ::thread thread-id) ops)]
-    (doto (Thread.
-            (fn apply-ops-thread []
-              @latch
-              (deliver results (apply-ops! system ops)))
-            (format "test.carly/%s/%d" (Integer/toHexString (hash system)) thread-id))
-      (.start))
-    results))
-
-
-(defn run-threads!
-  "Run each of the given operation sequences in a separate thread. Returns a
-  vector of the operation results for each thread."
-  [system op-seqs]
-  (let [latch (promise)
-        threads (map (partial run-ops! latch system) (range) op-seqs)]
-    (dorun threads)
-    (deliver latch :start)
-    ; TODO: timeout on deref?
-    (mapv deref threads)))
-
-
-
-;; ## World Modeling
-
-;; A world represents a point in time along a possible history. The model
-;; holds the current representation of the system, the history is the sequence
-;; of operations which have already happened, and pending is a map from thread
-;; ids to lists of pending operations for each thread.
-(defrecord World
-  [model history pending])
-
-
-(defn- end-of-line?
-  "Determine whether the worldline has ended."
-  [world]
-  (empty? (:pending world)))
-
-
-(defn- peek-pending
-  "Get the next pending operation for the identified thread, if any."
-  [pending thread-id]
-  (first (get pending thread-id)))
-
-
-(defn- pop-pending
-  "Remove the next pending operation for the identified thread. Returns an
-  updated map with the remaining ops, or without the thread if no ops were left."
-  [pending thread-id]
-  (let [[_ & more] (get pending thread-id)]
-    (if (seq more)
-      (assoc pending thread-id more)
-      (dissoc pending thread-id))))
-
-
-(defn- future-count
-  "Calculate the number of possible futures a world has based on a map of thread
-  ids to pending operations."
-  [pending]
-  (if (<= (count pending) 1)
-    1
-    (apply + (map (comp future-count (partial pop-pending pending))
-                  (keys pending)))))
-
-
-(defn- step
-  "Compute a step by applying the next operation from the identified thread to
-  the world. Returns an updated world state, or nil if the operation result was
-  invalid."
-  [world thread-id]
-  (let [op (peek-pending (:pending world) thread-id)]
-    (when-not op
-      (throw (IllegalStateException.
-               (format "Cannot step thread %d - no ops pending" thread-id))))
-    (when-not (contains? op ::result)
-      (throw (IllegalStateException.
-               (format "Cannot step op %s with no result" (pr-str op)))))
-    (when (check op (:model world) (::result op))
-      (-> world
-          (update :model (partial update-model op))
-          (update :history conj op)
-          (update :pending pop-pending thread-id)))))
-
-
-(defn- next-steps
-  "Compute all possible valid next steps for the world, returning a sequence of
-  new world states."
-  [world]
-  (keep (partial step world) (keys (:pending world))))
-
-
-(defn- ^:deprecated valid-results?
-  "Determines whether the given sequence of operations produced valid results
-  when applied to the system. Returns true if the system behavior is valid."
-  [model ops]
-  (loop [model model
-         ops ops]
-    (if-let [op (first ops)]
-      (if (check op model (::result op))
-        (recur (update-model op model) (rest ops))
-        false)
-      true)))
-
-
-
 ;; ## Linear Test
 
 (defn check-system
@@ -228,16 +94,8 @@
      ops (gen/not-empty (gen/list (gen/one-of (op-generators context))))]
     (let [system (constructor)]
       (try
-        (let [results (apply-ops! system ops)]
-          (loop [world (->World (init-model context) [] {0 results})]
-            (if (end-of-line? world)
-              ; Made it to the end of the world line with consistent results.
-              true
-              ; Step world forward. A nil here means the next operation result
-              ; is invalid, so the observed worldline is inconsistent with the
-              ; model.
-              (when-let [world' (step world 0)]
-                (recur world')))))
+        (let [results (op/apply-ops! system ops)]
+          (world/run-linear (world/initialize (init-model context) {0 results})))
         (finally
           (when on-stop
             (on-stop system)))))))

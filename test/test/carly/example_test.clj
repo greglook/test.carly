@@ -116,5 +116,5 @@
     #(atom (sorted-map))
     op-generators
     :context-gen gen-context
-    :iterations 10
+    :iterations 20
     :repetitions 5))

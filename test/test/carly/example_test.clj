@@ -106,7 +106,7 @@
     "basic store tests"
     #(atom (sorted-map))
     op-generators
-    :context-gen gen-context
+    :context gen-context
     :iterations 20))
 
 
@@ -115,6 +115,6 @@
     "concurrent store tests"
     #(atom (sorted-map))
     op-generators
-    :context-gen gen-context
-    :iterations 20
+    :context gen-context
+    :iterations 10
     :repetitions 5))

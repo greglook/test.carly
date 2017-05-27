@@ -123,7 +123,7 @@ Finally, we can define a linear test harness to exercise the store:
     "basic store tests"
     #(atom (sorted-map))
     op-generators
-    :context-gen gen-context
+    :context gen-context
     :iterations 20))
 ```
 
@@ -136,7 +136,7 @@ Of course, the real power is testing concurrently; to do so, use the related
     "concurrent store tests"
     #(atom (sorted-map))
     op-generators
-    :context-gen gen-context
+    :context gen-context
     :max-concurrency 4
     :repetitions 5
     :iterations 20))

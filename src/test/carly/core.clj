@@ -79,18 +79,18 @@
   generators when called with the test context. The remaining options control
   the behavior of the tests:
 
-  - `context-gen` generator for the operation test context
+  - `context`     generator for the operation test context
   - `init-model`  function which returns a fresh model when called with the context
   - `iterations`  number of generative tests to perform
   - `on-stop`     side-effecting function to call on the system after testing"
   [message constructor op-generators
-   & {:keys [context-gen init-model iterations on-stop]
-      :or {context-gen (gen/return {})
+   & {:keys [context init-model iterations on-stop]
+      :or {context (gen/return {})
            init-model (constantly {})
            iterations 100}}]
   {:pre [(fn? constructor)]}
   (checking message (chuck/times iterations)
-    [context context-gen
+    [context context
      ops (gen/not-empty (gen/list (gen/one-of (op-generators context))))]
     (let [system (constructor)]
       (try
@@ -228,7 +228,7 @@
   generators when called with the test context. The remaining options control
   the behavior of the tests:
 
-  - `context-gen` generator for the operation test context
+  - `context`     generator for the operation test context
   - `init-model`  function which returns a fresh model when called with the context
   - `iterations`  number of generative tests to perform
   - `repetitions` number of times to run per generation to ensure repeatability
@@ -238,8 +238,8 @@
 
   Returns the results of the generative tests."
   [message constructor op-generators
-   & {:keys [context-gen init-model iterations repetitions max-concurrency search-threads on-stop]
-      :or {context-gen (gen/return {})
+   & {:keys [context init-model iterations repetitions max-concurrency search-threads on-stop]
+      :or {context (gen/return {})
            init-model (constantly {})
            iterations 20
            repetitions 10
@@ -247,7 +247,7 @@
            search-threads (. (Runtime/getRuntime) availableProcessors)}}]
   {:pre [(fn? constructor)]}
   (checking message (chuck/times iterations)
-    [context context-gen
+    [context context
      num-threads (gen/choose 2 max-concurrency)
      op-seqs (-> (gen->Wait context)
                  (cons (op-generators context))

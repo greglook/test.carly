@@ -88,7 +88,11 @@ state.
 ```
 
 `PutEntry` on the other hand is side-effecting, and associates a new value with
-the specified key in both the store and the model.
+the specified key in both the store and the model. Note that the `check` method
+may use `is` assertions to test things, but must also return a boolean
+indicating whether the check passed. Since `is` returns the test value, the
+easiest way to achieve this is to combine all the `is` forms together with
+`and`, though that will skip expressions if it short circuits.
 
 In these examples the operation arguments are generated from a common _test
 context_, which has its own generator. This is pulled out so that there is a

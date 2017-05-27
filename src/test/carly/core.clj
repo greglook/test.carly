@@ -119,7 +119,7 @@
   (future
     (loop []
       (when-not (realized? result)
-        (if-let [world (.poll queue 1 TimeUnit/SECONDS)]
+        (if-let [world (.poll queue 100 TimeUnit/MILLISECONDS)]
           (do
             (when-not (contains? @visited (world/visit-key world))
               ; Add world to visited set.

@@ -24,7 +24,15 @@
   "Apply a sequence of operations to a system, returning a vector of pairs of
   the operations with their results."
   [system ops]
-  (mapv #(assoc % ::result (apply-op % system)) ops))
+  (mapv
+    (fn [op]
+      (assoc
+        op ::result
+        (try
+          (apply-op op system)
+          (catch Throwable t
+            t))))
+    ops))
 
 
 (defn run-ops!

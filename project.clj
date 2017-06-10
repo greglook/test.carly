@@ -14,4 +14,9 @@
 
   :test-selectors
   {:default (complement :concurrent)
-   :concurrent :concurrent})
+   :concurrent :concurrent}
+
+  :codox
+  {:metadata {:doc/format :markdown}
+   :source-uri "https://github.com/greglook/test.carly/blob/master/{filepath}#L{line}"
+   :output-path "target/doc/api"})

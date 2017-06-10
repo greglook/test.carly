@@ -1,6 +1,10 @@
 test.carly
 ==========
 
+[![CircleCI](https://circleci.com/gh/greglook/test.carly.svg?style=shield&circle-token=7b6c20133b5fcbb2cc5d0db564bf1742cf5f3cbd)](https://circleci.com/gh/greglook/test.carly)
+[![API documentation](https://img.shields.io/badge/doc-API-blue.svg)](https://greglook.github.io/test.carly/api/)
+[![Literate documentation](https://img.shields.io/badge/doc-marginalia-blue.svg)](https://greglook.github.io/test.carly/marginalia/uberdoc.html)
+
 This library provides a generative test framework for verifying the behavior of
 stateful systems under a sequence of random operations. You specify the types of
 operations and model the expected system behavior, and `test.carly` explores the

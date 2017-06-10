@@ -79,23 +79,24 @@
   generators when called with the test context. The remaining options control
   the behavior of the tests:
 
-  - `context-gen` generator for the operation test context
+  - `context`     generator for the operation test context
   - `init-model`  function which returns a fresh model when called with the context
   - `iterations`  number of generative tests to perform
   - `on-stop`     side-effecting function to call on the system after testing"
   [message constructor op-generators
-   & {:keys [context-gen init-model iterations on-stop]
-      :or {context-gen (gen/return {})
+   & {:keys [context init-model iterations on-stop]
+      :or {context (gen/return {})
            init-model (constantly {})
            iterations 100}}]
   {:pre [(fn? constructor)]}
   (checking message (chuck/times iterations)
-    [context context-gen
+    [context context
      ops (gen/not-empty (gen/list (gen/one-of (op-generators context))))]
     (let [system (constructor)]
       (try
         (let [results (op/apply-ops! system ops)]
-          (world/run-linear (world/initialize (init-model context) {0 results})))
+          (world/run-linear (world/initialize (init-model context) {0 results})
+                            (constantly nil)))
         (finally
           (when on-stop
             (on-stop system)))))))
@@ -119,28 +120,25 @@
   (future
     (loop []
       (when-not (realized? result)
-        (if-let [world (.poll queue 1 TimeUnit/SECONDS)]
-          (do
-            (when-not (contains? @visited (world/visit-key world))
+        (if-let [world (.poll queue 100 TimeUnit/MILLISECONDS)]
+          (let [mark-visited! #(swap! visited conj (world/visit-key %))
+                visited? #(contains? @visited (world/visit-key %))
+                start (System/nanoTime)]
+            (when-not (visited? world)
               ; Add world to visited set.
-              (swap! visited conj (world/visit-key world))
+              (mark-visited! world)
               ; Compute steps.
-              (let [start (System/nanoTime)
-                    value
               (binding [ctest/report (constantly nil)]
                 (if (<= (:futures world) 1)
                   ; Optimization to run the linear sequence directly when there is only one
                   ; possible future worldline.
-                  (when-let [end (world/run-linear world)]
+                  (when-let [end (world/run-linear world mark-visited!)]
                     (deliver result end))
                   ; Otherwise, calculate the next possible states and add any unvisited
                   ; ones to the queue.
                   (->> (world/next-steps world)
-                       (remove (comp @visited world/visit-key))
-                       (run! #(.offer queue %)))))]
-                ;(printf "Work task %.3f ms\n" (/ (- (System/nanoTime) start) 1000000.0))
-                ;(flush)
-                value))
+                       (remove visited?)
+                       (run! #(.offer queue %))))))
             (recur))
           ; Didn't find a world; if the queue is still empty, deliver nil.
           (when (empty? queue)
@@ -172,12 +170,10 @@
             thread-results (op/run-threads! system op-seqs)
             elapsed (/ (- (System/nanoTime) start) 1000000.0)
             _ (do (printf "Ran operations in %.2f ms\n" elapsed) (flush))
-            start (System/nanoTime)
             origin (world/initialize (init-model context) thread-results)
             visited (atom #{})
             queue (PriorityBlockingQueue. 20 compare-futures)]
-        (printf "Initialized world in %.3f ms. Searching for valid linearization among %s worldlines...\n"
-                (/ (- (System/nanoTime) start) 1000000.0)
+        (printf "Initialized world. Searching for valid linearization among %s worldlines...\n"
                 (:futures origin))
         (flush)
         (.offer queue origin)
@@ -228,7 +224,7 @@
   generators when called with the test context. The remaining options control
   the behavior of the tests:
 
-  - `context-gen` generator for the operation test context
+  - `context`     generator for the operation test context
   - `init-model`  function which returns a fresh model when called with the context
   - `iterations`  number of generative tests to perform
   - `repetitions` number of times to run per generation to ensure repeatability
@@ -238,8 +234,8 @@
 
   Returns the results of the generative tests."
   [message constructor op-generators
-   & {:keys [context-gen init-model iterations repetitions max-concurrency search-threads on-stop]
-      :or {context-gen (gen/return {})
+   & {:keys [context init-model iterations repetitions max-concurrency search-threads on-stop]
+      :or {context (gen/return {})
            init-model (constantly {})
            iterations 20
            repetitions 10
@@ -247,7 +243,7 @@
            search-threads (. (Runtime/getRuntime) availableProcessors)}}]
   {:pre [(fn? constructor)]}
   (checking message (chuck/times iterations)
-    [context context-gen
+    [context context
      num-threads (gen/choose 2 max-concurrency)
      op-seqs (-> (gen->Wait context)
                  (cons (op-generators context))

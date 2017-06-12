@@ -15,6 +15,9 @@ This project is inspired by Aphyr's excellent
 Clojure/West Talk, [Testing Stateful and Concurrent Systems Using
 test.check](https://www.youtube.com/watch?v=r5i_OiZw6Sw).
 
+For an overview of the project design, see this
+[2017 Seajure presentation](https://docs.google.com/presentation/d/1H8HqX414dhqCjHm-uxXAlq30pok_-ntPqVWvmLgdsNE/pub?start=false&loop=false&delayms=10000).
+
 
 ## Installation
 

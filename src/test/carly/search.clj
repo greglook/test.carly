@@ -10,11 +10,27 @@
       TimeUnit)))
 
 
-(defn compare-futures
+(defn- compare-futures
   "Ranks two worlds by the number of possible futures they have. Worlds with
   fewer futures will rank earlier."
   [a b]
   (compare (:futures a) (:futures b)))
+
+
+(defn- run-linear
+  "Steps a world forward to completion along a linear track. Returns a valid
+  terminal world if the operations end in a valid state, otherwise nil. Calls
+  `f` with each world visited."
+  [world f]
+  (when world
+    (f world)
+    (if (world/end-of-line? world)
+      ; Made it to the end of the world line with consistent results.
+      world
+      ; Step world forward. A nil here means the next operation result
+      ; is invalid, so the observed worldline is inconsistent with the
+      ; model.
+      (recur (world/step world) f))))
 
 
 (defn- spawn-worker!
@@ -36,7 +52,7 @@
                 (if (<= (:futures world) 1)
                   ; Optimization to run the linear sequence directly when there is only one
                   ; possible future worldline.
-                  (when-let [end (world/run-linear world mark-visited!)]
+                  (when-let [end (run-linear world mark-visited!)]
                     (deliver result end))
                   ; Otherwise, calculate the next possible states and add any unvisited
                   ; ones to the queue.
@@ -60,15 +76,33 @@
           workers (repeatedly n #(spawn-worker! queue report-fn visited result))]
       (dorun workers)
       (run! deref workers)
-      (if (empty? queue)
-        (println "Work queue is empty!")
-        (println "Work queue has" (count queue) "remaining states"))
       @result)))
 
 
-(defn find-valid-worldline
-  "Run `thread-count` worker threads to search through worldlines starting from
-  the given `model` to find valid linearizations of the `thread-results`."
+(defn- linear-search
+  "Run a world directly on-thread to perform a linear search. Only appropriate
+  when the world has a single worldline left."
+  [model thread-results report-fn]
+  (when-not (= 1 (count thread-results))
+    (throw (RuntimeException.
+             (str "Linear search is only valid on worlds with a single "
+                  "thread of operations, got " (count thread-results)))))
+  (let [visited (volatile! 0)
+        origin (world/initialize model thread-results)
+        start (System/nanoTime)
+        valid-world (binding [ctest/report report-fn]
+                      (run-linear origin (fn [world] (vswap! visited inc))))
+        elapsed (/ (- (System/nanoTime) start) 1000000.0)]
+    {:world valid-world
+     :visited @visited
+     :threads 1
+     :elapsed elapsed}))
+
+
+(defn- parallel-search
+  "Run up to `thread-count` worker threads to search through worldlines
+  starting from the given `model` to find valid linearizations of the
+  `thread-results`."
   [thread-count model thread-results report-fn]
   (let [visited (atom #{})
         origin (world/initialize model thread-results)
@@ -84,3 +118,16 @@
        :visited (count @visited)
        :threads thread-count
        :elapsed elapsed})))
+
+
+(defn search-worldlines
+  "Run up to `thread-count` worker threads to search through worldlines
+  starting from the given `model` to find valid linearizations of the
+  `thread-results`."
+  [thread-count model thread-results report-fn]
+  (when (empty? thread-results)
+    (throw (RuntimeException.
+             "Cannot search the worldless void (thread results were empty)")))
+  (if (= 1 (count thread-results))
+    (linear-search model thread-results report-fn)
+    (parallel-search thread-count model thread-results report-fn)))

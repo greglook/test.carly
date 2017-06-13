@@ -10,11 +10,17 @@
   :dependencies
   [[org.clojure/clojure "1.8.0"]
    [org.clojure/test.check "0.9.0"]
-   [com.gfredericks/test.chuck "0.2.7"]]
+   [mvxcvi/puget "1.0.1"]]
 
   :test-selectors
   {:default (complement :concurrent)
    :concurrent :concurrent}
+
+  :hiera
+  {:cluster-depth 2
+   :vertical false
+   :show-external true
+   :ignore-ns #{}}
 
   :codox
   {:metadata {:doc/format :markdown}

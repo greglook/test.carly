@@ -158,24 +158,29 @@
        :concurrency (count op-seqs)
        :op-count (reduce + 0 (map count op-seqs))})
     (loop [i 0
-           result nil]
+           result nil
+           assertions {}]
       (if (== repetitions i)
         (do (ctest/do-report
               ; TODO: send result counts?
               {:type ::report/trial-pass
                :repetitions repetitions
-               :elapsed (elapsed-since start)})
-            ; ideally, count every assertion but rewrite fail/error as pass?
+               :elapsed (elapsed-since start)
+               :assertions assertions})
             result)
-        (let [result' (runner-fn op-seqs)]
-          (if (:world result')
-            (recur (inc i) result')
+        (let [result (runner-fn op-seqs)
+              assertions (merge-with (fnil + 0)
+                                     assertions
+                                     (frequencies (map :type (:reports result))))]
+          (if (:world result)
+            (recur (inc i) result assertions)
             ; - on failure - count every passed/failed report from search
             (do (ctest/do-report
                   {:type ::report/trial-fail
                    :repetition (inc i)
-                   :elapsed (elapsed-since start)})
-                result')))))))
+                   :elapsed (elapsed-since start)
+                   :assertions assertions})
+                result)))))))
 
 
 (defn- report-test-summary
@@ -205,8 +210,8 @@
   - `init-model`      function which returns a fresh model when called with the context
   - `concurrency`     maximum number of operation threads to run in parallel
   - `repetitions`     number of times to run per generation to ensure repeatability
-  - `search-threads`  number of threads to run to search for valid worldlines"
-  ; TODO: verbose option
+  - `search-threads`  number of threads to run to search for valid worldlines
+  - `report`          options to override the default report configuration"
   [message
    iteration-opts
    init-system
@@ -220,17 +225,18 @@
       :as opts}]
   {:pre [(fn? init-system) (fn? ctx->op-gens)]}
   (ctest/testing message
-    (report-test-summary
-      (check/check-and-report
-        iteration-opts
-        (gen-test-inputs
-          context-gen
-          (cond-> ctx->op-gens
-            (< 1 concurrency) (waitable-ops))
-          concurrency)
-        (fn [ctx op-seqs]
-          (let [model (init-model ctx)]
-            (run-trial!
-              repetitions
-              (partial run-test! init-system (:on-stop opts) model search-threads)
-              op-seqs)))))))
+    (binding [report/*options* (merge report/*options* (:report opts))]
+      (report-test-summary
+        (check/check-and-report
+          iteration-opts
+          (gen-test-inputs
+            context-gen
+            (cond-> ctx->op-gens
+              (< 1 concurrency) (waitable-ops))
+            concurrency)
+          (fn [ctx op-seqs]
+            (let [model (init-model ctx)]
+              (run-trial!
+                repetitions
+                (partial run-test! init-system (:on-stop opts) model search-threads)
+                op-seqs))))))))

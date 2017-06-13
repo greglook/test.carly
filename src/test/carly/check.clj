@@ -2,7 +2,6 @@
   "Integration code for wedding generative `test.check` functions and
   `clojure.test` assertion macros."
   (:require
-    [clojure.test :as ctest]
     [clojure.test.check :as tc]
     [clojure.test.check.clojure-test :as tcct]
     [clojure.test.check.generators :as gen]))
@@ -10,20 +9,25 @@
 
 (defn- apply-test
   "Helper to produce a property by applying the test function to a realized
-  set of arguments from some bound generator."
+  set of arguments from some bound generator. The function should accept a
+  context map and a collection of op sequences, and return a result map with a
+  `:world` entry containing a valid terminal world on success, or nil on
+  failure."
   [function]
   (fn [args]
-    (let [result (try
-                   (apply function args)
-                   (catch ThreadDeath td
-                     (throw td))
-                   (catch Throwable ex
-                     ex))]
-      {:result result
-       :function function
-       ; XXX: Super gross, but we need to do this to get result metadata
-       ; through for failing results until test.check 0.10.0. ಠ_ಠ
-       :args (vary-meta args assoc ::result result)})))
+    (try
+      (let [result (apply function args)]
+        {:result (boolean (:world result))
+         :function function
+         ; XXX: Super gross, but we need to do this to get result metadata
+         ; through for failing results until test.check 0.10.0. ಠ_ಠ
+         :args (vary-meta args assoc ::result result)})
+      (catch ThreadDeath td
+        (throw td))
+      (catch Throwable ex
+        {:result ex
+         :function function
+         :args args}))))
 
 
 (defn check-and-report

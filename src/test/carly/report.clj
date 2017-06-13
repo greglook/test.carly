@@ -40,62 +40,84 @@
 
 
 
-;; ## Test Property
+;; ## Report Methods
 
-; TODO: move to core?
-(defn report-test-summary
-  "Emit clojure.test reports for the summarized results of the generative
-  tests."
-  [summary]
-  (if (and (:result summary) (not (instance? Throwable (:result summary))))
-    (let [result (:result summary)]
-      #_ ; success
-      {:result truthy
-       :num-tests num-trials
-       :seed seed}
-      (ctest/report
-        (assoc summary :type ::summary)))
-    (let [result (:test.carly.check/result (meta (get-in summary [:shrunk :smallest])))]
-      (prn :shrunk-result result)
-      #_ ; fail
-      {:result false-or-exception
-       :seed seed
-       :failing-size size
-       :num-tests (inc trial-number)
-       :fail (vec failing-args)
-       :shrunk {:total-nodes-visited total-nodes-visited
-                :depth depth
-                :result (:result smallest)
-                :smallest (:args smallest)}}
-      ; TODO: publish shrunk reports
-      (publish! (:reports result))
-      (ctest/report
-        (-> summary (dissoc :result) (assoc :type ::shrunk))))))
+(defmethod ctest/report ::trial-start
+  [report]
+  (ctest/with-test-out
+    (newline)
+    ; TODO: better formatting
+    (printf "Starting%s trial with %d ops%s...\n"
+            (if (< 1 (:repetitions report))
+              (str " " (:repetitions report) "x")
+              "")
+            (:op-count report)
+            (if (< 1 (:concurrency report))
+              (str " across " (:concurrency report) " threads")
+              ""))))
 
 
+(defmethod ctest/report ::test-start
+  [report]
+  ; no-op
+  ,,,)
 
 
+(defmethod ctest/report ::run-ops
+  [report]
+  ; TODO: only if verbose
+  (ctest/with-test-out
+    (printf "Ran %d ops%s in %.2f ms\n"
+            (:op-count report)
+            (if (< 1 (:concurrency report))
+              (str " across " (:concurrency report) " threads")
+              "")
+            (:elapsed report))))
 
 
+#_ ; search returns:
+{:world valid-world
+ :threads 1
+ :futures n
+ :visited @visited
+ :reports @reports
+ :elapsed elapsed}
 
 
+; TODO: update nested assertion pass/fail/error counts?
+; TODO: option to show valid linearization
+(defmethod ctest/report ::test-pass
+  [report]
+  (ctest/with-test-out
+    (ctest/inc-report-counter :pass)
+    (printf "Found valid worldline among %s futures in %.2f ms after visiting %d worlds\n"
+            (:futures report)
+            (:elapsed report)
+            (:visited report))))
 
 
+(defmethod ctest/report ::test-fail
+  [report]
+  (ctest/with-test-out
+    (ctest/inc-report-counter :fail)
+    (printf "Exhausted valid worldlines among %s futures in %.2f ms after visiting %d worlds\n"
+            (:futures report)
+            (:elapsed report)
+            (:visited report))))
 
-;;;;; REVIEW BELOW THIS LINE ;;;;;
 
-:test.carly/trial-start
+(defmethod ctest/report ::trial-pass
+  [report]
+  ; green check mark at end of dots?
+  ; TODO: something with 'elapsed'?
+  )
 
-:test.carly/test-start
-:test.carly/run-ops
-:test.carly/test-pass
-:test.carly/test-fail
 
-:test.carly/trial-pass
-:test.carly/trial-fail
-
-:test.carly/summary
-:test.carly/shrunk
+(defmethod ctest/report ::trial-fail
+  [report]
+  ; red X at end of dots?
+  ; TODO: something with 'elapsed'?
+  )
 
 
 ;; Report a successful generative test summary.
@@ -123,13 +145,10 @@
       (newline)
       (println "Operation sequences:")
       (doseq [ops op-seqs]
-        (puget/cprint ops)))))
-
-
-(defn report-filter
-  "Test reporting function which silently counts simple result types :pass, :fail,
-  and :error as namespace variants, and calls report-fn with all others."
-  [report-fn report]
-  (case (:type report)
-    (:pass :fail :error) (ctest/inc-report-counter :pass)
-    (report-fn report)))
+        (puget/cprint ops)))
+    (newline)
+    (println "Result:")
+    (let [result (get-in summary [:shrunk :result])]
+      (if (instance? Throwable result)
+        (clojure.stacktrace/print-cause-trace result)
+        (puget/cprint result)))))

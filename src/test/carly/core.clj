@@ -128,7 +128,7 @@
         (when on-stop
           (on-stop system))
         (ctest/do-report
-          {:type :test.carly/run-ops
+          {:type ::report/run-ops
            :op-count (reduce + 0 (map count op-seqs))
            :concurrency (count op-seqs)
            :elapsed (elapsed-since start)})))))
@@ -138,31 +138,13 @@
   "Runs a generative test iteration. Returns true if the test iteration passed."
   [constructor on-stop model thread-count op-seqs]
   (ctest/do-report
-    {:type :test.carly/test-start})
+    {:type ::report/test-start})
   (let [op-results (run-ops! constructor on-stop op-seqs)
         result (search/search-worldlines thread-count model op-results)]
-    ; search returns:
-    #_
-    {:world valid-world
-     :threads 1
-     :visited @visited
-     :reports @reports
-     :elapsed elapsed}
-    ; TODO: update nested assertion pass/fail/error counts?
-    (if (:world result)
-      (ctest/do-report
-        {:type :test.carly/test-pass
-         :message (format "Found valid worldline in %.2f ms after visiting %d worlds"
-                          (:elapsed result) (:visited result))
-         ; TODO: option to show valid linearization
-         :expected '(linearizable? history)
-         :actual (get-in result [:world :history])})
-      (ctest/do-report
-        {:type :test.carly/test-fail
-         :message (format "Exhausted worldlines in %.2f ms after visiting %d worlds"
-                          (:elapsed result) (:visited result))
-         :expected '(linearizable? history)
-         :actual op-results}))
+    (ctest/do-report
+      (assoc result :type (if (:world result)
+                            ::report/test-pass
+                            ::report/test-fail)))
     result))
 
 
@@ -171,7 +153,7 @@
   [repetitions runner-fn op-seqs]
   (let [start (System/nanoTime)]
     (ctest/do-report
-      {:type :test.carly/trial-start
+      {:type ::report/trial-start
        :repetitions repetitions
        :concurrency (count op-seqs)
        :op-count (reduce + 0 (map count op-seqs))})
@@ -180,20 +162,33 @@
       (if (== repetitions i)
         (do (ctest/do-report
               ; TODO: send result counts?
-              {:type :test.carly/trial-pass
+              {:type ::report/trial-pass
                :repetitions repetitions
                :elapsed (elapsed-since start)})
             ; ideally, count every assertion but rewrite fail/error as pass?
-            true)
-        (let [results' (runner-fn op-seqs)]
-          (if (:world results')
-            (recur (inc i) results')
+            result)
+        (let [result' (runner-fn op-seqs)]
+          (if (:world result')
+            (recur (inc i) result')
             ; - on failure - count every passed/failed report from search
             (do (ctest/do-report
-                  {:type :test.carly/trial-fail
+                  {:type ::report/trial-fail
                    :repetition (inc i)
                    :elapsed (elapsed-since start)})
-                false)))))))
+                result')))))))
+
+
+(defn- report-test-summary
+  "Emit clojure.test reports for the summarized results of the generative
+  tests."
+  [summary]
+  (if (and (:result summary) (not (instance? Throwable (:result summary))))
+    (ctest/report
+      (assoc summary :type ::report/summary))
+    (ctest/report
+      (assoc summary
+             :type ::shrunk
+             :shrunk-result (::check/result (meta (get-in summary [:shrunk :smallest])))))))
 
 
 (defn check-system
@@ -211,6 +206,7 @@
   - `concurrency`     maximum number of operation threads to run in parallel
   - `repetitions`     number of times to run per generation to ensure repeatability
   - `search-threads`  number of threads to run to search for valid worldlines"
+  ; TODO: verbose option
   [message
    iteration-opts
    init-system
@@ -224,7 +220,7 @@
       :as opts}]
   {:pre [(fn? init-system) (fn? ctx->op-gens)]}
   (ctest/testing message
-    (report/report-test-summary
+    (report-test-summary
       (check/check-and-report
         iteration-opts
         (gen-test-inputs

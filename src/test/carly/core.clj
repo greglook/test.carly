@@ -24,6 +24,24 @@
        (every? (comp #{:pass} :type) reports#))))
 
 
+(defn- generator-body
+  "Macro helper to build a generator constructor."
+  [op-name [form :as body]]
+  (cond
+    (and (= 1 (count body)) (vector? form))
+      `(gen/fmap
+         (partial apply ~(symbol (str "->" (name op-name))))
+         (gen/tuple ~@form))
+    (and (= 1 (count body)) (map? form))
+      `(gen/fmap
+         ~(symbol (str "map->" (name op-name)))
+         (gen/hash-map ~@(apply concat form)))
+    :else
+      `(gen/fmap
+         ~(symbol (str "map->" (name op-name)))
+         (do ~@body))))
+
+
 (defmacro defop
   "Defines a new specification for a system operation test."
   [op-name attr-vec & forms]
@@ -50,22 +68,7 @@
        (defn ~(symbol (str "gen->" (name op-name)))
          ~(str "Constructs a " (name op-name) " operation generator.")
          ~@(if-let [[_ args & body] (defined 'gen-args)]
-             [args
-              (cond
-                (and (= 1 (count body))
-                     (vector? (first body)))
-                  `(gen/fmap
-                     (partial apply ~(symbol (str "->" (name op-name))))
-                     (gen/tuple ~@(first body)))
-                (and (= 1 (count body))
-                     (map? (first body)))
-                  `(gen/fmap
-                     ~(symbol (str "map->" (name op-name)))
-                     (gen/hash-map ~@(apply concat (first body))))
-                :else
-                  `(gen/fmap
-                     ~(symbol (str "map->" (name op-name)))
-                     (do ~@body)))]
+             [args (generator-body op-name body)]
              [['context]
               `(gen/return (~(symbol (str "->" (name op-name)))))])))))
 

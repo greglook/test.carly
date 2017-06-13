@@ -4,15 +4,13 @@
   (:require
     [clojure.test :as ctest]
     [clojure.test.check.generators :as gen]
-    [clojure.test.check.properties :as prop]
     (test.carly
       [glue :as glue]
       [op :as op]
-      [search :as search]
-      [world :as world])))
+      [search :as search])))
 
 
-;; ## Test Operations
+;; ## Test Operation Definition
 
 (defn- generator-body
   "Macro helper to build a generator constructor."
@@ -83,7 +81,7 @@
 
 
 
-;; ## Test Harnesses
+;; ## Test Harness
 
 (defn- gen-test-inputs
   "Create a generator for inputs to a system under test. This generator
@@ -236,4 +234,5 @@
         (run-test-loop!
           repetitions
           (partial run-test! init-system (:on-stop opts)
-                   model search-threads))))))
+                   model search-threads)
+          op-seqs)))))

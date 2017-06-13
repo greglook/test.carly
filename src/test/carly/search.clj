@@ -2,7 +2,6 @@
   "Functions for running concurrent workers to search for valid worldlines."
   (:require
     [clojure.test :as ctest]
-    [test.carly.op :as op]
     [test.carly.world :as world])
   (:import
     (java.util.concurrent

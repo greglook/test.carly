@@ -2,8 +2,8 @@
   "Integration code for wedding generative test.check functions to clojure.test
   assertion macros."
   (:require
-    [clojure.test.check :as tc]
     [clojure.test :as ctest]
+    [clojure.test.check :as tc]
     [puget.printer :as puget]))
 
 
@@ -36,7 +36,7 @@
 
 #_
 (defmacro check-and-report
-  [message num-tests-or-options bindings & body]
+  [message num-tests-or-options & body]
   `(ctest/testing ~message
      (let [final-reports# (atom [])]
        ; TODO: run tests...

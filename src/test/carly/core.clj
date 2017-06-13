@@ -13,6 +13,8 @@
       [world :as world])))
 
 
+;; ## Test Operations
+
 (defn- wrap-op-check
   "Wrap the body of an operation's 'check' method such that it returns true if
   every test assertion in the body passes."
@@ -21,7 +23,7 @@
     sym args
     `(let [reports# (tcct/capture-reports ~@body)]
        (tcct/publish! reports#)
-       (every? (comp #{:pass} :type) reports#))))
+       (not (some (comp #{:fail :error} :type) reports#)))))
 
 
 (defn- generator-body
@@ -85,66 +87,99 @@
     (Thread/sleep duration)))
 
 
+(defn- waitable-ops
+  "Takes a function from context to vector of op generators and returns a
+  new function which additionally returns the wait op as the first result"
+  [op-generators]
+  (comp (partial cons (gen->Wait nil)) op-generators))
+
+
 
 ;; ## Test Harnesses
 
 (defn- run-ops!
-  "Run a collection of op sequences on the system in parallel. Returns a map
-  from thread index to operations updated with results."
-  [system op-seqs]
+  "Construct a system, run a collection of op sequences on the system (possibly
+  concurrently), and shut the system down. Returns a map from thread index to
+  operations updated with results."
+  [constructor on-stop op-seqs]
   (let [start (System/nanoTime)
-        results (op/run-threads! system op-seqs)
-        elapsed (/ (- (System/nanoTime) start) 1000000.0)]
-    (printf "Ran %d operations%s in %.2f ms\n"
-            (reduce + 0 (map count op-seqs))
-            (let [threads (count op-seqs)]
-              (if (= 1 threads)
-                ""
-                (str " across " threads " threads")))
-            elapsed)
-    (flush)
-    results))
-
-
-(defn- run-test!
-  "Runs a concurrent test iteration. Returns ???"
-  [constructor init-model context op-seqs thread-count on-stop]
-  (let [system (constructor)]
+        system (constructor)]
     (try
-      (let [op-results (run-ops! system op-seqs)
-            ; TODO: report-fn needs to capture test results, and if a valid world is found
-            ; they should actually all be 'pass' or maybe 'info' instead of fail. If a valid
-            ; world is not found, they should be reported as failures directly.
-            report-fn (constantly nil)
-            result (search/find-valid-worldline thread-count (init-model context) op-results report-fn)]
-          (if (:world result)
-            (let [message (format "Found valid worldline in %.2f ms after visiting %d worlds"
-                                  (:elapsed result) (:visited result))]
-              (println message)
-              ;(prn (:history valid-world))
-              (flush)
-              ; Found a valid world, so :fail results should be converted into :pass or :info?
-              ; ???
-              (ctest/do-report
-                {:type :pass
-                 :message message
-                 :expected 'linearizable
-                 :actual (get-in result [:world :history])})
-              true)
-            (let [message (format "Exhausted worldlines in %.2f ms after visiting %d worlds"
-                                  (:elapsed result) (:visited result))]
-              (println message)
-              (flush)
-              ; No valid world found, report all assertions as-is.
-              (ctest/do-report
-                {:type :fail
-                 :message message
-                 :expected 'linearizable
-                 :actual op-results})
-              false)))
+      (case (count op-seqs)
+        0 op-seqs
+        1 {0 (op/apply-ops! system (first op-seqs))}
+          (op/run-threads! system op-seqs))
       (finally
         (when on-stop
-          (on-stop system))))))
+          (on-stop system))
+        ; TODO: ctest/report type?
+        (printf "Ran %d operations%s in %.2f ms\n"
+                (reduce + 0 (map count op-seqs))
+                (let [threads (count op-seqs)]
+                  (if (= 1 threads)
+                    ""
+                    (str " across " threads " threads")))
+                (/ (- (System/nanoTime) start) 1000000.0))
+        (flush)))))
+
+
+(defn- gen-test-inputs
+  "Create a generator for inputs to a system under test. This generator
+  produces a context and a collection of sequences of operations generated from
+  the context.
+
+  If `max-concurrency` is 1, there will be a single thread of operations,
+  otherwise there will be between 2 and `max-concurrency` threads."
+  [context-gen op-generators max-concurrency]
+  (gen/bind
+    (gen/tuple
+      (or context-gen (gen/return {}))
+      (if (<= max-concurrency 1)
+        (gen/return 1)
+        (gen/choose 2 max-concurrency)))
+    (fn [[context concurrency]]
+      (gen/tuple
+        (gen/return context)
+        (-> (op-generators context)
+            (gen/one-of)
+            (gen/list)
+            (gen/not-empty)
+            (gen/vector concurrency))))))
+
+
+(defn- run-concurrent-test!
+  "Runs a concurrent test iteration. Returns true if the test iteration passed."
+  [constructor on-stop model thread-count op-seqs]
+  (let [op-results (run-ops! constructor on-stop op-seqs)
+        result (search/find-valid-worldline
+                 thread-count
+                 model
+                 op-results
+                 (partial tcct/report-counter ctest/report))]
+      (if (:world result)
+        (let [message (format "Found valid worldline in %.2f ms after visiting %d worlds"
+                              (:elapsed result) (:visited result))]
+          (println message)
+          ; TODO: option to show valid linearization
+          ;(prn (:history valid-world))
+          (flush)
+          (ctest/do-report
+            {:type :pass
+             :message message
+             :expected 'linearizable
+             :actual (get-in result [:world :history])})
+          true)
+        (let [message (format "Exhausted worldlines in %.2f ms after visiting %d worlds"
+                              (:elapsed result) (:visited result))]
+          (println message)
+          (flush)
+          ; No valid world found, report all assertions as-is.
+          (ctest/do-report
+            {:type :fail
+             :message message
+             :expected 'linearizable?
+             :actual op-results})
+          false))))
 
 
 (defn check-system
@@ -166,18 +201,15 @@
            init-model (constantly {})
            iterations 100}}]
   {:pre [(fn? constructor)]}
-  (checking message (chuck/times iterations)
-    [context context
-     ops (gen/not-empty (gen/list (gen/one-of (op-generators context))))]
-    (let [system (constructor)]
-      (try
-        (let [results (op/apply-ops! system ops)]
-          (world/run-linear
-            (world/initialize (init-model context) {0 results})
-            (constantly nil)))
-        (finally
-          (when on-stop
-            (on-stop system)))))))
+  (tcct/check-and-report
+    message iterations
+    (prop/for-all
+      [[ctx op-seqs] (gen-test-inputs context op-generators 1)]
+      (let [results (run-ops! constructor on-stop op-seqs)]
+        ; No special capturing here.
+        (world/run-linear
+          (world/initialize (init-model ctx) results)
+          (constantly nil))))))
 
 
 (defn check-system-concurrent
@@ -207,25 +239,26 @@
            max-concurrency 4
            search-threads (. (Runtime/getRuntime) availableProcessors)}}]
   {:pre [(fn? constructor)]}
-  (checking message (chuck/times iterations)
-    [context context
-     num-threads (gen/choose 2 max-concurrency)
-     op-seqs (-> (gen->Wait context)
-                 (cons (op-generators context))
-                 (gen/one-of)
-                 (gen/list)
-                 (gen/not-empty)
-                 (gen/vector num-threads))]
-    (printf "\nStarting test iteration of %d repetitions with %d ops across %d threads:\n"
-            repetitions
-            (count (apply concat op-seqs))
-            (count op-seqs))
-    ; TODO: option to print out input ops
-    (loop [i 0]
-      (if (<= repetitions i)
-        true
-        (do
-          (println "\nTest repetition" (inc i))
-          (if (run-test! constructor init-model context op-seqs search-threads on-stop)
-            (recur (inc i))
-            false))))))
+  (tcct/check-and-report
+    message iterations
+    (prop/for-all
+      [[ctx op-seqs] (gen-test-inputs context (waitable-ops op-generators) max-concurrency)]
+      ; TODO: ctest/report?
+      (printf "\nStarting test iteration of %d repetitions with %d ops across %d threads:\n"
+              repetitions
+              (count (apply concat op-seqs))
+              (count op-seqs))
+      ; TODO: option to print out input ops
+      (loop [i 0]
+        (if (<= repetitions i)
+          ; ideally, count every assertion but rewrite fail/error as pass?
+          true
+          (do
+            (println "\nTest repetition" (inc i))
+            ; TODO: desired outcome:
+            ; - on success - count every passed report
+            (if (run-concurrent-test! constructor on-stop (init-model ctx) search-threads op-seqs)
+              (recur (inc i))
+              ; - on failure - count every passed/failed report from search
+              ;   - pretty print shrunk input
+              false)))))))

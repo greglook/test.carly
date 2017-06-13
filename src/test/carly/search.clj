@@ -70,7 +70,6 @@
   have terminated."
   [n queue report-fn visited]
   (when-not (empty? queue)
-    (println "Running" n "workers to search worldlines...")
     (let [result (promise)
           workers (repeatedly n #(spawn-worker! queue report-fn visited result))]
       (dorun workers)
@@ -81,52 +80,50 @@
 (defn- linear-search
   "Run a world directly on-thread to perform a linear search. Only appropriate
   when the world has a single worldline left."
-  [model thread-results report-fn]
-  (when-not (= 1 (count thread-results))
-    (throw (RuntimeException.
-             (str "Linear search is only valid on worlds with a single "
-                  "thread of operations, got " (count thread-results)))))
+  [origin]
   (let [visited (volatile! 0)
-        origin (world/initialize model thread-results)
+        reports (volatile! [])
         start (System/nanoTime)
-        valid-world (binding [ctest/report report-fn]
+        valid-world (binding [ctest/report #(vswap! reports conj %)]
                       (run-linear origin (fn [world] (vswap! visited inc))))
         elapsed (/ (- (System/nanoTime) start) 1000000.0)]
     {:world valid-world
-     :visited @visited
      :threads 1
+     :futures 1
+     :visited @visited
+     :reports @reports
      :elapsed elapsed}))
 
 
 (defn- parallel-search
   "Run up to `thread-count` worker threads to search through worldlines
-  starting from the given `model` to find valid linearizations of the
-  `thread-results`."
-  [thread-count model thread-results report-fn]
+  starting from the given `origin` world to find valid linearizations of the
+  pending operations."
+  [origin thread-count]
   (let [visited (atom #{})
-        origin (world/initialize model thread-results)
-        queue (PriorityBlockingQueue. 20 compare-futures)]
-    (printf "Initialized origin world. Searching for valid linearization among %s worldlines...\n"
-            (:futures origin))
-    (flush)
-    (.offer queue origin)
-    (let [start (System/nanoTime)
-          valid-world (run-workers! thread-count queue report-fn visited)
-          elapsed (/ (- (System/nanoTime) start) 1000000.0)]
+        reports (atom [])
+        queue (doto (PriorityBlockingQueue. 20 compare-futures)
+                (.offer origin))
+        start (System/nanoTime)
+        valid-world (run-workers! thread-count queue (partial swap! reports conj) visited)
+        elapsed (/ (- (System/nanoTime) start) 1000000.0)]
       {:world valid-world
-       :visited (count @visited)
        :threads thread-count
-       :elapsed elapsed})))
+       :futures (:futures origin)
+       :visited (count @visited)
+       :reports @reports
+       :elapsed elapsed}))
 
 
 (defn search-worldlines
   "Run up to `thread-count` worker threads to search through worldlines
   starting from the given `model` to find valid linearizations of the
   `thread-results`."
-  [thread-count model thread-results report-fn]
+  [thread-count model thread-results]
   (when (empty? thread-results)
     (throw (RuntimeException.
              "Cannot search the worldless void (thread results were empty)")))
-  (if (= 1 (count thread-results))
-    (linear-search model thread-results report-fn)
-    (parallel-search thread-count model thread-results report-fn)))
+  (let [origin (world/initialize model thread-results)]
+    (if (= 1 (:futures origin))
+      (linear-search origin)
+      (parallel-search origin thread-count))))

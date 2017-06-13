@@ -5,8 +5,9 @@
     [clojure.test :as ctest]
     [clojure.test.check.generators :as gen]
     (test.carly
-      [glue :as glue]
+      [check :as check]
       [op :as op]
+      [report :as report]
       [search :as search])))
 
 
@@ -47,7 +48,7 @@
               '(apply-op [op system] nil))
 
          ~(if-let [[sym args & body] (defined 'check)]
-            (list sym args (glue/wrap-report-check body))
+            (list sym args (report/wrap-report-check body))
             '(check [op model result] true))
 
          ~(or (defined 'update-model)
@@ -86,17 +87,14 @@
 (defn- gen-test-inputs
   "Create a generator for inputs to a system under test. This generator
   produces a context and a collection of sequences of operations generated from
-  the context.
-
-  If `max-concurrency` is 1, there will be a single thread of operations,
-  otherwise there will be between 2 and `max-concurrency` threads."
+  the context."
   [context-gen ctx->op-gens max-concurrency]
   (gen/bind
     (gen/tuple
       context-gen
       (if (<= max-concurrency 1)
         (gen/return 1)
-        (gen/choose 2 max-concurrency)))
+        (gen/choose 1 max-concurrency)))
     (fn [[context concurrency]]
       (gen/tuple
         (gen/return context)
@@ -105,6 +103,13 @@
             (gen/list)
             (gen/not-empty)
             (gen/vector concurrency))))))
+
+
+(defn- elapsed-since
+  "Returns the number of milliseconds elapsed since an initial start time
+  in system nanoseconds."
+  [start]
+  (/ (- (System/nanoTime) start) 1000000.0))
 
 
 (defn- run-ops!
@@ -122,77 +127,73 @@
       (finally
         (when on-stop
           (on-stop system))
-        ; TODO: ctest/report :test.carly/run-ops
-        (printf "Ran %d operations%s in %.2f ms\n"
-                (reduce + 0 (map count op-seqs))
-                (let [threads (count op-seqs)]
-                  (if (= 1 threads)
-                    ""
-                    (str " across " threads " threads")))
-                (/ (- (System/nanoTime) start) 1000000.0))
-        (flush)))))
+        (ctest/do-report
+          {:type :test.carly/run-ops
+           :op-count (reduce + 0 (map count op-seqs))
+           :concurrency (count op-seqs)
+           :elapsed (elapsed-since start)})))))
 
 
 (defn- run-test!
   "Runs a generative test iteration. Returns true if the test iteration passed."
   [constructor on-stop model thread-count op-seqs]
+  (ctest/do-report
+    {:type :test.carly/test-start})
   (let [op-results (run-ops! constructor on-stop op-seqs)
-        result (search/search-worldlines
-                 thread-count
-                 model
-                 op-results
-                 ctest/report
-                 ; TODO: figure out what to use here
-                 #_ (partial glue/report-counter ctest/report))]
-      (if (:world result)
-        (let [message (format "Found valid worldline in %.2f ms after visiting %d worlds"
-                              (:elapsed result) (:visited result))]
-          (println message)
-          ; TODO: option to show valid linearization
-          ;(prn (:history valid-world))
-          ;(flush)
-          (ctest/do-report
-            {:type :pass
-             :message message
-             :expected '(linearizable? history)
-             :actual (get-in result [:world :history])})
-          true)
-        (let [message (format "Exhausted worldlines in %.2f ms after visiting %d worlds"
-                              (:elapsed result) (:visited result))]
-          ;(println message)
-          ;(flush)
-          ; No valid world found, report all assertions as-is.
-          (ctest/do-report
-            {:type :fail
-             :message message
-             :expected '(linearizable? history)
-             :actual op-results})
-          false))))
+        result (search/search-worldlines thread-count model op-results)]
+    ; search returns:
+    #_
+    {:world valid-world
+     :threads 1
+     :visited @visited
+     :reports @reports
+     :elapsed elapsed}
+    ; TODO: update nested assertion pass/fail/error counts?
+    (if (:world result)
+      (ctest/do-report
+        {:type :test.carly/test-pass
+         :message (format "Found valid worldline in %.2f ms after visiting %d worlds"
+                          (:elapsed result) (:visited result))
+         ; TODO: option to show valid linearization
+         :expected '(linearizable? history)
+         :actual (get-in result [:world :history])})
+      (ctest/do-report
+        {:type :test.carly/test-fail
+         :message (format "Exhausted worldlines in %.2f ms after visiting %d worlds"
+                          (:elapsed result) (:visited result))
+         :expected '(linearizable? history)
+         :actual op-results}))
+    result))
 
 
-(defn- run-test-loop!
+(defn- run-trial!
+  "Run a generative trial involving multiple test repetitions."
   [repetitions runner-fn op-seqs]
-  ; TODO: ctest/report?
-  (printf "\nStarting test iteration of %d repetitions with %d ops across %d threads:\n"
-          repetitions
-          (count (apply concat op-seqs))
-          (count op-seqs))
-  ; TODO: option to print out input ops
-  (loop [i 0
-         result nil]
-    (if (<= repetitions i)
-      ; ideally, count every assertion but rewrite fail/error as pass?
-      true ;result
-      (do
-        (println "\nTest repetition" (inc i))
-        ; TODO: desired outcome:
-        ; - on success - count every passed report
+  (let [start (System/nanoTime)]
+    (ctest/do-report
+      {:type :test.carly/trial-start
+       :repetitions repetitions
+       :concurrency (count op-seqs)
+       :op-count (reduce + 0 (map count op-seqs))})
+    (loop [i 0
+           result nil]
+      (if (== repetitions i)
+        (do (ctest/do-report
+              ; TODO: send result counts?
+              {:type :test.carly/trial-pass
+               :repetitions repetitions
+               :elapsed (elapsed-since start)})
+            ; ideally, count every assertion but rewrite fail/error as pass?
+            true)
         (let [results' (runner-fn op-seqs)]
-          (if (:result results')
+          (if (:world results')
             (recur (inc i) results')
             ; - on failure - count every passed/failed report from search
-            ;   - pretty print shrunk input
-            false))))))
+            (do (ctest/do-report
+                  {:type :test.carly/trial-fail
+                   :repetition (inc i)
+                   :elapsed (elapsed-since start)})
+                false)))))))
 
 
 (defn check-system
@@ -222,17 +223,18 @@
            search-threads (. (Runtime/getRuntime) availableProcessors)}
       :as opts}]
   {:pre [(fn? init-system) (fn? ctx->op-gens)]}
-  (glue/check-and-report
-    message iteration-opts
-    (gen-test-inputs
-      context-gen
-      (cond-> ctx->op-gens
-        (< 1 concurrency) (waitable-ops))
-      concurrency)
-    (fn [ctx op-seqs]
-      (let [model (init-model ctx)]
-        (run-test-loop!
-          repetitions
-          (partial run-test! init-system (:on-stop opts)
-                   model search-threads)
-          op-seqs)))))
+  (ctest/testing message
+    (report/report-test-summary
+      (check/check-and-report
+        iteration-opts
+        (gen-test-inputs
+          context-gen
+          (cond-> ctx->op-gens
+            (< 1 concurrency) (waitable-ops))
+          concurrency)
+        (fn [ctx op-seqs]
+          (let [model (init-model ctx)]
+            (run-trial!
+              repetitions
+              (partial run-test! init-system (:on-stop opts) model search-threads)
+              op-seqs)))))))

@@ -10,7 +10,8 @@
 ; TODO: output options
 (def ^:dynamic *options*
   {:style :verbose
-   :print-color true})
+   :print-color true
+   :puget {}})
 
 
 ; TODO: affordance for setting pretty-printer handlers
@@ -22,6 +23,11 @@
   (if (:print-color *options*)
     (apply ansi/sgr text codes)
     text))
+
+
+(defn- pprint
+  [x]
+  (puget/pprint x (assoc (:puget *options*) :print-color (:print-color *options*))))
 
 
 (defn- format-duration
@@ -155,7 +161,7 @@
   (ctest/with-test-out
     (case (:style *options*)
       :verbose
-        (printf "Trial %s in %s after %d tests\n"
+        (printf "Trial %s in %s after %s tests\n"
                 (colorize "FAILED" :bold :red)
                 (format-duration (:elapsed result))
                 (colorize (:repetition result) :cyan))
@@ -171,9 +177,9 @@
       :verbose
         (do
           ; TODO: summarize total assertion counts if possible
-          (printf "\nGenerative tests passed after %s repetitions with seed %s\n"
+          (printf "\nGenerative tests passed after %s trials with seed %s\n"
                   (colorize (:num-tests summary) :cyan)
-                  (:seed summary)))
+                  (colorize (:seed summary) :green)))
       ,,,)))
 
 
@@ -189,29 +195,40 @@
                              :shrunk {:total-nodes-visited total-nodes-visited
                                       :depth depth
                                       :result (:result smallest)
-                                      :smallest (:args smallest)}}
+                                      :smallest (:args smallest)}
+                             :shrunk-result {:world nil
+                                             :threads n
+                                             :futures n
+                                             :visited n
+                                             :reports [,,,]
+                                             :elapsed ms}}
   (ctest/with-test-out
     (case (:style *options*)
       :verbose
         (do
           (newline)
-          (printf "Tests failed with seed %s - smallest case:\n" (:seed summary))
-          ; TODO: better formatting
-          (prn (dissoc (:shrunk summary) :smallest))
-          (let [[context op-seqs] (get-in summary [:shrunk :smallest])]
+          (printf "Tests failed with seed %s\n"
+                  (colorize (:seed summary) :red))
+          (when-let [shrunk (:shrunk summary)]
+            (printf "Shrank inputs %s steps after searching %s nodes\n"
+                    (colorize (:depth shrunk) :cyan)
+                    (colorize (:total-nodes-visited shrunk) :cyan)))
+          (when-let [[context op-seqs] (get-in summary
+                                               [:shrunk :smallest]
+                                               (:fail summary))]
             (newline)
             (println "Context:")
-            (puget/cprint context)
+            (pprint context)
             (newline)
             (println "Operation sequences:")
             (doseq [ops op-seqs]
-              (puget/cprint ops)))
+              (pprint ops)))
           (newline)
           (println "Result:")
-          (let [result (get-in summary [:shrunk :result])]
+          (let [result (get-in summary [:shrunk :result] (:result summary))]
             (if (instance? Throwable result)
               (clojure.stacktrace/print-cause-trace result)
-              (puget/cprint result))))
+              (pprint result))))
       ,,,)))
 
 

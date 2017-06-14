@@ -184,7 +184,7 @@
       (assoc summary :type ::report/summary))
     (ctest/report
       (assoc summary
-             :type ::shrunk
+             :type ::report/shrunk
              :shrunk-result (::check/result (meta (get-in summary [:shrunk :smallest])))))))
 
 

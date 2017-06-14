@@ -2,19 +2,30 @@
   "Integration code for wedding generative `test.check` functions and
   `clojure.test` assertion macros."
   (:require
+    [clojure.string :as str]
     [clojure.test :as ctest]
     [puget.color.ansi :as ansi]
     [puget.printer :as puget]))
 
 
-; TODO: output options
+(defn- env-keyword
+  "Looks up an environment variable and returns a keywordized value if it is
+  present, or nil if not."
+  [env-key default]
+  (if-let [env-val(System/getenv env-key)]
+    (keyword (str/lower-case env-val))
+    default))
+
+
 (def ^:dynamic *options*
-  {:style :verbose
-   :print-color true
+  "Report output options."
+  {:style (env-keyword "TEST_CARLY_STYLE" :dots)
+   :print-color (not (contains? #{:0 :false :no}
+                                (env-keyword "TEST_CARLY_COLOR" true)))
    :puget {}})
 
 
-; TODO: affordance for setting pretty-printer handlers
+; TODO: utility for setting pretty-printer handlers
 
 
 (defn- colorize
@@ -26,6 +37,7 @@
 
 
 (defn- pprint
+  "Pretty-print the given value using the dynamic reporting options."
   [x]
   (puget/pprint x (assoc (:puget *options*) :print-color (:print-color *options*))))
 
@@ -57,6 +69,11 @@
                   (str " across " (colorize (:concurrency result) :cyan) " threads")
                   "")
                 (colorize ">>>" :bold :blue))
+      :terse
+        (do (printf "%12s/%-10s | "
+                    (colorize (:op-count result) :cyan)
+                    (colorize (:concurrency result) :bold :yellow))
+            (flush))
       ; otherwise silent
       nil)))
 
@@ -120,7 +137,11 @@
                 (colorize (:futures result) :cyan)
                 (format-duration (:elapsed result))
                 (colorize (:visited result) :cyan))
-      ,,,)))
+      (:terse :dots)
+        (do (print (colorize "." :green))
+            (flush))
+      ; Otherwise no-op
+      nil)))
 
 
 ;; Report that a test repetition failed, indicating that no valid worldline
@@ -136,22 +157,30 @@
                 (colorize (:futures result) :cyan)
                 (format-duration (:elapsed result))
                 (colorize (:visited result) :cyan))
-      ,,,)))
+      (:terse :dots)
+        (do (print (colorize "." :red))
+            (flush))
+      ; Otherwise no-op
+      nil)))
 
 
 ;; An entire test trial passed, meaning every repetition was successful.
 (defmethod ctest/report ::trial-pass
   [result]
-  (let [assertions (:assertions result)
-        assertion-count (reduce + 0 (vals assertions))]
-    (ctest/with-test-out
-      (case (:style *options*)
-        :verbose
-          (printf "Trial %s in %s\n"
-                  (colorize "PASSED" :bold :green)
-                  (format-duration (:elapsed result)))
-        ; TODO: green check mark at end of dots?
-        ,,,))))
+  (ctest/with-test-out
+    (case (:style *options*)
+      :verbose
+        (printf "Trial %s in %s\n"
+                (colorize "PASSED" :bold :green)
+                (format-duration (:elapsed result)))
+      :terse
+        (do (print (colorize "✓" :bold :green)
+                   " "
+                   (format-duration (:elapsed result)))
+            (newline)
+            (flush))
+      ; Otherwise no-op
+      nil)))
 
 
 ;; An entire trial failed, indicating that one or more repetitions was
@@ -165,22 +194,22 @@
                 (colorize "FAILED" :bold :red)
                 (format-duration (:elapsed result))
                 (colorize (:repetition result) :cyan))
-      ; TODO: red X at end of dots?
-      ,,,)))
+      :terse
+        (do (print (colorize "X" :bold :red))
+            (newline)
+            (flush))
+      ; Otherwise no-op
+      nil)))
 
 
 ;; Report a successful generative test summary.
 (defmethod ctest/report ::summary
   [summary]
   (ctest/with-test-out
-    (case (:style *options*)
-      :verbose
-        (do
-          ; TODO: summarize total assertion counts if possible
-          (printf "\nGenerative tests passed after %s trials with seed %s\n"
-                  (colorize (:num-tests summary) :cyan)
-                  (colorize (:seed summary) :green)))
-      ,,,)))
+    ; TODO: summarize total assertion counts if possible
+    (printf "\nGenerative tests passed after %s trials with seed %s\n"
+            (colorize (:num-tests summary) :cyan)
+            (colorize (:seed summary) :green))))
 
 
 ;; Report the shrunk value of a failed test summary.
@@ -203,33 +232,29 @@
                                              :reports [,,,]
                                              :elapsed ms}}
   (ctest/with-test-out
-    (case (:style *options*)
-      :verbose
-        (do
-          (newline)
-          (printf "Tests failed with seed %s\n"
-                  (colorize (:seed summary) :red))
-          (when-let [shrunk (:shrunk summary)]
-            (printf "Shrank inputs %s steps after searching %s nodes\n"
-                    (colorize (:depth shrunk) :cyan)
-                    (colorize (:total-nodes-visited shrunk) :cyan)))
-          (when-let [[context op-seqs] (get-in summary
-                                               [:shrunk :smallest]
-                                               (:fail summary))]
-            (newline)
-            (println "Context:")
-            (pprint context)
-            (newline)
-            (println "Operation sequences:")
-            (doseq [ops op-seqs]
-              (pprint ops)))
-          (newline)
-          (println "Result:")
-          (let [result (get-in summary [:shrunk :result] (:result summary))]
-            (if (instance? Throwable result)
-              (clojure.stacktrace/print-cause-trace result)
-              (pprint result))))
-      ,,,)))
+    (newline)
+    (printf "Tests failed with seed %s\n"
+            (colorize (:seed summary) :red))
+    (when-let [shrunk (:shrunk summary)]
+      (printf "Shrank inputs %s steps after searching %s nodes\n"
+              (colorize (:depth shrunk) :cyan)
+              (colorize (:total-nodes-visited shrunk) :cyan)))
+    (when-let [[context op-seqs] (get-in summary
+                                         [:shrunk :smallest]
+                                         (:fail summary))]
+      (newline)
+      (println "Context:")
+      (pprint context)
+      (newline)
+      (println "Operation sequences:")
+      (doseq [ops op-seqs]
+        (pprint ops)))
+    (newline)
+    (println "Result:")
+    (let [result (get-in summary [:shrunk :result] (:result summary))]
+      (if (instance? Throwable result)
+        (clojure.stacktrace/print-cause-trace result)
+        (pprint result)))))
 
 
 

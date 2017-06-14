@@ -32,8 +32,7 @@
 
   (apply-op
     [this system]
-    (when (not= k :z)
-      (get @system k)))
+    (get @system k))
 
   (check
     [this model result]
@@ -110,7 +109,7 @@
 
 
 (deftest ^:concurrent concurrent-store-test
-  (carly/check-system "concurrent store tests" 25
+  (carly/check-system "concurrent store tests" 100
     #(atom (sorted-map))
     op-generators
     :context-gen gen-context))

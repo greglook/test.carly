@@ -247,12 +247,13 @@
       (pprint context)
       (newline)
       (println "Operation sequences:")
-      (doseq [ops (or (vals (get-in summary [:shrunk-result :op-results]))
-                      op-seqs)]
-        (pprint (map #(if (contains? % :test.carly.op/result)
-                        [(dissoc % :test.carly.op/result) '=> (:test.carly.op/result %)]
-                        %)
-                     ops))))
+      (doseq [[i ops] (or (get-in summary [:shrunk-result :op-results])
+                          (zipmap (range) op-seqs))]
+        (printf "thread #%d\n" (inc i))
+        (doseq [op ops]
+          (if (contains? op :test.carly.op/result)
+            (pprint [(dissoc op :test.carly.op/result) '=> (:test.carly.op/result op)])
+            (pprint op)))))
     (newline)
     (println "Result:")
     (let [result (get-in summary [:shrunk :result] (:result summary))]

@@ -247,8 +247,12 @@
       (pprint context)
       (newline)
       (println "Operation sequences:")
-      (doseq [ops op-seqs]
-        (pprint ops)))
+      (doseq [ops (or (vals (get-in summary [:shrunk-result :op-results]))
+                      op-seqs)]
+        (pprint (map #(if (contains? % :test.carly.op/result)
+                        [(dissoc % :test.carly.op/result) '=> (:test.carly.op/result %)]
+                        %)
+                     ops))))
     (newline)
     (println "Result:")
     (let [result (get-in summary [:shrunk :result] (:result summary))]

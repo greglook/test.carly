@@ -135,7 +135,7 @@
 
 
 (defn- run-test!
-  "Runs a generative test iteration. Returns true if the test iteration passed."
+  "Runs a generative test iteration. Returns a test result map."
   [constructor on-stop model thread-count op-seqs]
   (ctest/do-report
     {:type ::report/test-start})
@@ -145,7 +145,7 @@
       (assoc result :type (if (:world result)
                             ::report/test-pass
                             ::report/test-fail)))
-    result))
+    (assoc result :op-results op-results)))
 
 
 (defn- run-trial!

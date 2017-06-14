@@ -33,29 +33,33 @@
 
 ;; ## Report Methods
 
+;; Report the beginning of a new test trial. Check forms produce one trial per
+;; generative iteration, so there may be more if shrinking is necessary.
 (defmethod ctest/report ::trial-start
-  [report]
+  [result]
   (ctest/with-test-out
     (case (:style *options*)
       :verbose
         (printf "\n%s Starting %s trial%s with %s operations%s %s\n"
                 (colorize "<<<" :bold :blue)
                 (colorize "test.carly" :magenta)
-                (if (< 1 (:repetitions report))
-                  (colorize (str " x" (:repetitions report)) :cyan)
+                (if (< 1 (:repetitions result))
+                  (colorize (str " x" (:repetitions result)) :cyan)
                   "")
-                (colorize (:op-count report) :bold :yellow)
-                (if (< 1 (:concurrency report))
-                  (str " across " (colorize (:concurrency report) :cyan) " threads")
+                (colorize (:op-count result) :bold :yellow)
+                (if (< 1 (:concurrency result))
+                  (str " across " (colorize (:concurrency result) :cyan) " threads")
                   "")
                 (colorize ">>>" :bold :blue))
       ; otherwise silent
       nil)))
 
 
+;; Start of a test repetition. This is mainly useful as a marker.
 (defmethod ctest/report ::test-start
-  [report]
+  [result]
   (ctest/with-test-out
+    (ctest/inc-report-counter :test)
     (case (:style *options*)
       :verbose
         (println "  Starting test repetition...")
@@ -63,86 +67,98 @@
       nil)))
 
 
+;; Elapsed time to run the operations against a real system.
 (defmethod ctest/report ::run-ops
-  [report]
+  [result]
   (ctest/with-test-out
     (case (:style *options*)
       :verbose
-        (printf "    Ran %s ops%s in %s\n"
-                (colorize (:op-count report) :bold :yellow)
-                (if (< 1 (:concurrency report))
-                  (str " across " (colorize (:concurrency report) :cyan) " threads")
-                  "")
-                (format-duration (:elapsed report)))
+        (printf "    Ran ops in %s\n" (format-duration (:elapsed result)))
       ; otherwise silent
       nil)))
 
 
-#_ ; search returns:
-{:world valid-world
- :threads 1
- :futures n
- :visited @visited
- :reports @reports
- :elapsed elapsed}
+(defn- report-assertions
+  "Common reporting code for assertions at the end of a test."
+  [result]
+  (let [assertions (frequencies (map :type (:reports result)))
+        total (reduce + 0 (vals assertions))]
+    ; Record every assertion as a :pass, since failures during searches are not
+    ; real failures.
+    (when ctest/*report-counters*
+      (dosync
+        (commute ctest/*report-counters* update :pass (fnil + 0) total)))
+    ; Print out assertion counts
+    (case (:style *options*)
+      :verbose
+        (printf "    Checked %s assertions (%d passed, %d failed, %d errors)\n"
+                (colorize total :cyan)
+                (:pass assertions 0)
+                (:fail assertions 0)
+                (:error assertions 0))
+      ; Otherwise no-op
+      nil)))
 
 
-; TODO: update nested assertion pass/fail/error counts?
+;; Report that a test repetition passed successfully, indicating that a valid
+;; worldline was found.
 (defmethod ctest/report ::test-pass
-  [report]
+  [result]
   ; TODO: option to show valid linearization
   (ctest/with-test-out
     (ctest/inc-report-counter :pass)
+    (report-assertions result)
     (case (:style *options*)
       :verbose
         (printf "    Found valid worldline among %s futures in %s after visiting %s worlds.\n"
-                (colorize (:futures report) :cyan)
-                (format-duration (:elapsed report))
-                (colorize (:visited report) :cyan))
+                (colorize (:futures result) :cyan)
+                (format-duration (:elapsed result))
+                (colorize (:visited result) :cyan))
       ,,,)))
 
 
+;; Report that a test repetition failed, indicating that no valid worldline
+;; could be found for the observed operation results.
 (defmethod ctest/report ::test-fail
-  [report]
+  [result]
   (ctest/with-test-out
     (ctest/inc-report-counter :fail)
+    (report-assertions result)
     (case (:style *options*)
       :verbose
         (printf "    Exhausted valid worldlines among %s futures in %s after visiting %s worlds!\n"
-                (colorize (:futures report) :cyan)
-                (format-duration (:elapsed report))
-                (colorize (:visited report) :cyan))
+                (colorize (:futures result) :cyan)
+                (format-duration (:elapsed result))
+                (colorize (:visited result) :cyan))
       ,,,)))
 
 
+;; An entire test trial passed, meaning every repetition was successful.
 (defmethod ctest/report ::trial-pass
-  [report]
-  (ctest/with-test-out
-    (case (:style *options*)
-      :verbose
-        (printf "Trial %s in %s checking %s assertions (%d passed, %d failed, %d errors)\n"
-                (colorize "PASSED" :bold :green)
-                (format-duration (:elapsed report))
-                (colorize (reduce + 0 (vals (:assertions report))) :cyan)
-                (get-in report [:assertions :pass] 0)
-                (get-in report [:assertions :fail] 0)
-                (get-in report [:assertions :error] 0))
-      ; TODO: green check mark at end of dots?
-      ,,,)))
+  [result]
+  (let [assertions (:assertions result)
+        assertion-count (reduce + 0 (vals assertions))]
+    (ctest/with-test-out
+      (case (:style *options*)
+        :verbose
+          (printf "Trial %s in %s\n"
+                  (colorize "PASSED" :bold :green)
+                  (format-duration (:elapsed result)))
+        ; TODO: green check mark at end of dots?
+        ,,,))))
 
 
+;; An entire trial failed, indicating that one or more repetitions was
+;; unsuccessful.
 (defmethod ctest/report ::trial-fail
-  [report]
+  [result]
   (ctest/with-test-out
     (case (:style *options*)
       :verbose
-        (printf "Trial %s in %s checking %d assertions (%d passed, %d failed, %d errors)\n"
+        (printf "Trial %s in %s after %d tests\n"
                 (colorize "FAILED" :bold :red)
-                (format-duration (:elapsed report))
-                (colorize (reduce + 0 (vals (:assertions report))) :cyan)
-                (get-in report [:assertions :pass] 0)
-                (get-in report [:assertions :fail] 0)
-                (get-in report [:assertions :error] 0))
+                (format-duration (:elapsed result))
+                (colorize (:repetition result) :cyan))
       ; TODO: red X at end of dots?
       ,,,)))
 
@@ -150,18 +166,14 @@
 ;; Report a successful generative test summary.
 (defmethod ctest/report ::summary
   [summary]
-                            #_ ; success
-                            {:result truthy
-                             :num-tests num-trials
-                             :seed seed}
   (ctest/with-test-out
     (case (:style *options*)
       :verbose
         (do
-          (newline)
-          (printf "Generative tests passed with seed %s:\n" (:seed summary))
-          ; TODO: better formatting, include captured assertion totals
-          (prn summary))
+          ; TODO: summarize total assertion counts if possible
+          (printf "\nGenerative tests passed after %s repetitions with seed %s\n"
+                  (colorize (:num-tests summary) :cyan)
+                  (:seed summary)))
       ,,,)))
 
 

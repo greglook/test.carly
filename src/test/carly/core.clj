@@ -158,28 +158,20 @@
        :concurrency (count op-seqs)
        :op-count (reduce + 0 (map count op-seqs))})
     (loop [i 0
-           result nil
-           assertions {}]
+           result nil]
       (if (== repetitions i)
         (do (ctest/do-report
-              ; TODO: send result counts?
               {:type ::report/trial-pass
                :repetitions repetitions
-               :elapsed (elapsed-since start)
-               :assertions assertions})
+               :elapsed (elapsed-since start)})
             result)
-        (let [result (runner-fn op-seqs)
-              assertions (merge-with (fnil + 0)
-                                     assertions
-                                     (frequencies (map :type (:reports result))))]
+        (let [result (runner-fn op-seqs)]
           (if (:world result)
-            (recur (inc i) result assertions)
-            ; - on failure - count every passed/failed report from search
+            (recur (inc i) result)
             (do (ctest/do-report
                   {:type ::report/trial-fail
                    :repetition (inc i)
-                   :elapsed (elapsed-since start)
-                   :assertions assertions})
+                   :elapsed (elapsed-since start)})
                 result)))))))
 
 

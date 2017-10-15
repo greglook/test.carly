@@ -255,6 +255,18 @@
             (pprint [(dissoc op :test.carly.op/result) '=> (:test.carly.op/result op)])
             (pprint op)))))
     (newline)
+    (println "Failing assertions:")
+    (run!
+      (fn [report]
+        ; {:file "table_test.clj", :line 131, :type :fail, :expected (coll? result), :actual (not (coll? nil)), :message nil}
+        (when (#{:fail :error} (:type report))
+          (printf "%s:%s %s\n\tExpected: %s\tActual: %s"
+                  (:file report) (:line report)
+                  (or (:message report) "")
+                  (with-out-str (pprint (:expected report)))
+                  (with-out-str (pprint (:actual report))))))
+      (get-in summary [:shrunk-result :reports]))
+    (newline)
     (println "Result:")
     (let [result (get-in summary [:shrunk :result] (:result summary))]
       (if (instance? Throwable result)

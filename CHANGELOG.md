@@ -9,6 +9,13 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ...
 
+## [0.4.0] - 2017-10-15
+
+### Changed
+- Refactored code into separate namespaces for clarity.
+- Significantly better reporting output for tests.
+- Many improvements to concurrent code.
+
 ## [0.3.0] - 2017-06-09
 
 ### Changed
@@ -38,7 +45,8 @@ worlds (those with fewer possible futures) searched first.
 
 Initial project release.
 
-[Unreleased]: https://github.com/greglook/test.carly/compare/0.3.0...HEAD
+[Unreleased]: https://github.com/greglook/test.carly/compare/0.4.0...HEAD
+[0.4.0]: https://github.com/greglook/test.carly/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/greglook/test.carly/compare/0.2.0...0.3.0
 [0.2.0]: https://github.com/greglook/test.carly/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/greglook/test.carly/tag/0.1.0

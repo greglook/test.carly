@@ -1,6 +1,10 @@
 test.carly
 ==========
 
+[![CircleCI](https://circleci.com/gh/greglook/test.carly.svg?style=shield&circle-token=7b6c20133b5fcbb2cc5d0db564bf1742cf5f3cbd)](https://circleci.com/gh/greglook/test.carly)
+[![API documentation](https://img.shields.io/badge/doc-API-blue.svg)](https://greglook.github.io/test.carly/api/)
+[![Literate documentation](https://img.shields.io/badge/doc-marginalia-blue.svg)](https://greglook.github.io/test.carly/marginalia/uberdoc.html)
+
 This library provides a generative test framework for verifying the behavior of
 stateful systems under a sequence of random operations. You specify the types of
 operations and model the expected system behavior, and `test.carly` explores the
@@ -10,6 +14,9 @@ This project is inspired by Aphyr's excellent
 [Jepsen](https://aphyr.com/tags/Jepsen) project as well as Eric Normand's 2017
 Clojure/West Talk, [Testing Stateful and Concurrent Systems Using
 test.check](https://www.youtube.com/watch?v=r5i_OiZw6Sw).
+
+For an overview of the project design, see this
+[2017 Seajure presentation](https://docs.google.com/presentation/d/1H8HqX414dhqCjHm-uxXAlq30pok_-ntPqVWvmLgdsNE/pub?start=false&loop=false&delayms=10000).
 
 
 ## Installation

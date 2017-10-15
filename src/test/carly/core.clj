@@ -4,17 +4,33 @@
   (:require
     [clojure.test :as ctest]
     [clojure.test.check.generators :as gen]
-    [com.gfredericks.test.chuck :as chuck]
-    [com.gfredericks.test.chuck.clojure-test :refer [checking]]
-    [test.carly.op :as op]
-    [test.carly.world :as world])
-  (:import
-    (java.util.concurrent
-      PriorityBlockingQueue
-      TimeUnit)))
+    (test.carly
+      [check :as check]
+      [op :as op]
+      [report :as report]
+      [search :as search])))
 
 
-; TODO: move to op ns?
+;; ## Test Operation Definition
+
+(defn- generator-body
+  "Macro helper to build a generator constructor."
+  [op-name [form :as body]]
+  (cond
+    (and (= 1 (count body)) (vector? form))
+      `(gen/fmap
+         (partial apply ~(symbol (str "->" (name op-name))))
+         (gen/tuple ~@form))
+    (and (= 1 (count body)) (map? form))
+      `(gen/fmap
+         ~(symbol (str "map->" (name op-name)))
+         (gen/hash-map ~@(apply concat form)))
+    :else
+      `(gen/fmap
+         ~(symbol (str "map->" (name op-name)))
+         (do ~@body))))
+
+
 (defmacro defop
   "Defines a new specification for a system operation test."
   [op-name attr-vec & forms]
@@ -28,29 +44,20 @@
 
          op/TestOperation
 
-         ~(or (defined 'apply-op) '(apply-op [op system] nil))
-         ~(or (defined 'check) '(check [op model result] true))
-         ~(or (defined 'update-model) '(update-model [op model] model)))
+         ~(or (defined 'apply-op)
+              '(apply-op [op system] nil))
+
+         ~(if-let [[sym args & body] (defined 'check)]
+            (list sym args (report/wrap-report-check body))
+            '(check [op model result] true))
+
+         ~(or (defined 'update-model)
+              '(update-model [op model] model)))
 
        (defn ~(symbol (str "gen->" (name op-name)))
          ~(str "Constructs a " (name op-name) " operation generator.")
          ~@(if-let [[_ args & body] (defined 'gen-args)]
-             [args
-              (cond
-                (and (= 1 (count body))
-                     (vector? (first body)))
-                  `(gen/fmap
-                     (partial apply ~(symbol (str "->" (name op-name))))
-                     (gen/tuple ~@(first body)))
-                (and (= 1 (count body))
-                     (map? (first body)))
-                  `(gen/fmap
-                     ~(symbol (str "map->" (name op-name)))
-                     (gen/hash-map ~@(apply concat (first body))))
-                :else
-                  `(gen/fmap
-                     ~(symbol (str "map->" (name op-name)))
-                     (do ~@body)))]
+             [args (generator-body op-name body)]
              [['context]
               `(gen/return (~(symbol (str "->" (name op-name)))))])))))
 
@@ -67,8 +74,119 @@
     (Thread/sleep duration)))
 
 
+(defn- waitable-ops
+  "Takes a function from context to vector of op generators and returns a
+  new function which additionally returns the wait op as the first result"
+  [op-generators]
+  (comp (partial cons (gen->Wait nil)) op-generators))
 
-;; ## Linear Test
+
+
+;; ## Test Harness
+
+(defn- gen-test-inputs
+  "Create a generator for inputs to a system under test. This generator
+  produces a context and a collection of sequences of operations generated from
+  the context."
+  [context-gen ctx->op-gens max-concurrency]
+  (gen/bind
+    (gen/tuple
+      context-gen
+      (if (<= max-concurrency 1)
+        (gen/return 1)
+        (gen/choose 1 max-concurrency)))
+    (fn [[context concurrency]]
+      (gen/tuple
+        (gen/return context)
+        (-> (ctx->op-gens context)
+            (gen/one-of)
+            (gen/list)
+            (gen/not-empty)
+            (gen/vector concurrency))))))
+
+
+(defn- elapsed-since
+  "Returns the number of milliseconds elapsed since an initial start time
+  in system nanoseconds."
+  [start]
+  (/ (- (System/nanoTime) start) 1000000.0))
+
+
+(defn- run-ops!
+  "Construct a system, run a collection of op sequences on the system (possibly
+  concurrently), and shut the system down. Returns a map from thread index to
+  operations updated with results."
+  [constructor on-stop op-seqs]
+  (let [start (System/nanoTime)
+        system (constructor)]
+    (try
+      (case (count op-seqs)
+        0 op-seqs
+        1 {0 (op/apply-ops! system (first op-seqs))}
+          (op/run-threads! system op-seqs))
+      (finally
+        (when on-stop
+          (on-stop system))
+        (ctest/do-report
+          {:type ::report/run-ops
+           :op-count (reduce + 0 (map count op-seqs))
+           :concurrency (count op-seqs)
+           :elapsed (elapsed-since start)})))))
+
+
+(defn- run-test!
+  "Runs a generative test iteration. Returns a test result map."
+  [constructor on-stop model thread-count op-seqs]
+  (ctest/do-report
+    {:type ::report/test-start})
+  (let [op-results (run-ops! constructor on-stop op-seqs)
+        result (search/search-worldlines thread-count model op-results)]
+    (ctest/do-report
+      (assoc result :type (if (:world result)
+                            ::report/test-pass
+                            ::report/test-fail)))
+    (assoc result :op-results op-results)))
+
+
+(defn- run-trial!
+  "Run a generative trial involving multiple test repetitions."
+  [repetitions runner-fn op-seqs]
+  (let [start (System/nanoTime)]
+    (ctest/do-report
+      {:type ::report/trial-start
+       :repetitions repetitions
+       :concurrency (count op-seqs)
+       :op-count (reduce + 0 (map count op-seqs))})
+    (loop [i 0
+           result nil]
+      (if (== repetitions i)
+        (do (ctest/do-report
+              {:type ::report/trial-pass
+               :repetitions repetitions
+               :elapsed (elapsed-since start)})
+            result)
+        (let [result (runner-fn op-seqs)]
+          (if (:world result)
+            (recur (inc i) result)
+            (do (ctest/do-report
+                  {:type ::report/trial-fail
+                   :repetition (inc i)
+                   :elapsed (elapsed-since start)})
+                result)))))))
+
+
+(defn- report-test-summary
+  "Emit clojure.test reports for the summarized results of the generative
+  tests."
+  [summary]
+  (if (and (:result summary) (not (instance? Throwable (:result summary))))
+    (ctest/report
+      (assoc summary :type ::report/summary))
+    (ctest/report
+      (assoc summary
+             :type ::report/shrunk
+             :shrunk-result (::check/result (meta (get-in summary [:shrunk :smallest])))))))
+
 
 (defn check-system
   "Uses generative tests to validate the behavior of a system under a linear
@@ -79,188 +197,38 @@
   generators when called with the test context. The remaining options control
   the behavior of the tests:
 
-  - `context`     generator for the operation test context
-  - `init-model`  function which returns a fresh model when called with the context
-  - `iterations`  number of generative tests to perform
-  - `on-stop`     side-effecting function to call on the system after testing"
-  [message constructor op-generators
-   & {:keys [context init-model iterations on-stop]
-      :or {context (gen/return {})
+  - `on-stop`         side-effecting function to call on the system after testing
+  - `context-gen`     generator for the operation test context
+  - `init-model`      function which returns a fresh model when called with the context
+  - `concurrency`     maximum number of operation threads to run in parallel
+  - `repetitions`     number of times to run per generation to ensure repeatability
+  - `search-threads`  number of threads to run to search for valid worldlines
+  - `report`          options to override the default report configuration"
+  [message
+   iteration-opts
+   init-system
+   ctx->op-gens
+   & {:keys [context-gen init-model concurrency repetitions search-threads]
+      :or {context-gen (gen/return {})
            init-model (constantly {})
-           iterations 100}}]
-  {:pre [(fn? constructor)]}
-  (checking message (chuck/times iterations)
-    [context context
-     ops (gen/not-empty (gen/list (gen/one-of (op-generators context))))]
-    (let [system (constructor)]
-      (try
-        (let [results (op/apply-ops! system ops)]
-          (world/run-linear (world/initialize (init-model context) {0 results})
-                            (constantly nil)))
-        (finally
-          (when on-stop
-            (on-stop system)))))))
-
-
-
-;; ## Concurrent Test
-
-(defn- compare-futures
-  "Ranks two worlds by the number of possible futures they have. Worlds with
-  fewer futures will rank earlier."
-  [a b]
-  (compare (:futures a) (:futures b)))
-
-
-(defn- spawn-worker
-  "Poll the queue for a world, calculate next states, and add valid ones back
-  into the queue. The `result` promise will be delivered with the first valid
-  terminal world found. One `result` has been realized, the loop will exit."
-  [^PriorityBlockingQueue queue visited result]
-  (future
-    (loop []
-      (when-not (realized? result)
-        (if-let [world (.poll queue 100 TimeUnit/MILLISECONDS)]
-          (let [mark-visited! #(swap! visited conj (world/visit-key %))
-                visited? #(contains? @visited (world/visit-key %))
-                start (System/nanoTime)]
-            (when-not (visited? world)
-              ; Add world to visited set.
-              (mark-visited! world)
-              ; Compute steps.
-              (binding [ctest/report (constantly nil)]
-                (if (<= (:futures world) 1)
-                  ; Optimization to run the linear sequence directly when there is only one
-                  ; possible future worldline.
-                  (when-let [end (world/run-linear world mark-visited!)]
-                    (deliver result end))
-                  ; Otherwise, calculate the next possible states and add any unvisited
-                  ; ones to the queue.
-                  (->> (world/next-steps world)
-                       (remove visited?)
-                       (run! #(.offer queue %))))))
-            (recur))
-          ; Didn't find a world; if the queue is still empty, deliver nil.
-          (when (empty? queue)
-            (deliver result nil)))))))
-
-
-(defn- run-workers!
-  "Run a collection of worker threads to consume the given queue of worlds.
-  Blocks and returns the first valid world found, or nil, once all the threads
-  have terminated."
-  [n queue visited]
-  (when-not (empty? queue)
-    (println "Running" n "workers to search worldlines...")
-    (let [result (promise)
-          workers (repeatedly n #(spawn-worker queue visited result))]
-      (dorun workers)
-      (run! deref workers)
-      (if (empty? queue)
-        (println "Work queue is empty!")
-        (println "Work queue has" (count queue) "remaining states"))
-      @result)))
-
-
-(defn- run-test-iteration
-  [constructor init-model context op-seqs search-threads on-stop]
-  (let [system (constructor)]
-    (try
-      (let [start (System/nanoTime)
-            thread-results (op/run-threads! system op-seqs)
-            elapsed (/ (- (System/nanoTime) start) 1000000.0)
-            _ (do (printf "Ran operations in %.2f ms\n" elapsed) (flush))
-            origin (world/initialize (init-model context) thread-results)
-            visited (atom #{})
-            queue (PriorityBlockingQueue. 20 compare-futures)]
-        (printf "Initialized world. Searching for valid linearization among %s worldlines...\n"
-                (:futures origin))
-        (flush)
-        (.offer queue origin)
-        (let [start (System/nanoTime)
-              valid-world (run-workers! search-threads queue visited)
-              elapsed (/ (- (System/nanoTime) start) 1000000.0)]
-          (if valid-world
-            (let [message (format "Found valid worldline in %.2f ms after visiting %d worlds"
-                                  elapsed (count @visited))]
-              (println message)
-              ;(prn (:history valid-world))
-              (flush)
-              (let [valid-history? (loop [model (init-model context)
-                                          ops (:history valid-world)]
-                                     (if-let [op (first ops)]
-                                       (if (op/check op model (::op/result op))
-                                         (recur (op/update-model op model) (rest ops))
-                                         false)
-                                       true))]
-                (ctest/is valid-history?))
-              (ctest/do-report
-                {:type :pass
-                 :message message
-                 :expected 'linearizable
-                 :actual (:history valid-world)})
-              true)
-            (let [message (format "Exhausted worldlines in %.2f ms after visiting %d worlds"
-                                  elapsed (count @visited))]
-              (println message)
-              (flush)
-              (ctest/do-report
-                {:type :fail
-                 :message message
-                 :expected 'linearizable
-                 :actual thread-results})
-              false))))
-      (finally
-        (when on-stop
-          (on-stop system))))))
-
-
-(defn check-system-concurrent
-  "Uses generative tests to validate the behavior of a system under multiple concurrent
-  threads of operations.
-
-  Takes a test message, a no-arg constructor function which will produce a new
-  system for testing, and a function which will return a vector of operation
-  generators when called with the test context. The remaining options control
-  the behavior of the tests:
-
-  - `context`     generator for the operation test context
-  - `init-model`  function which returns a fresh model when called with the context
-  - `iterations`  number of generative tests to perform
-  - `repetitions` number of times to run per generation to ensure repeatability
-  - `max-concurrency` maximum number of operation threads to run in parallel
-  - `search-threads` number of threads to run to search for valid worldlines
-  - `on-stop`     side-effecting function to call on the system after testing
-
-  Returns the results of the generative tests."
-  [message constructor op-generators
-   & {:keys [context init-model iterations repetitions max-concurrency search-threads on-stop]
-      :or {context (gen/return {})
-           init-model (constantly {})
-           iterations 20
-           repetitions 10
-           max-concurrency 4
-           search-threads (. (Runtime/getRuntime) availableProcessors)}}]
-  {:pre [(fn? constructor)]}
-  (checking message (chuck/times iterations)
-    [context context
-     num-threads (gen/choose 2 max-concurrency)
-     op-seqs (-> (gen->Wait context)
-                 (cons (op-generators context))
-                 (gen/one-of)
-                 (gen/list)
-                 (gen/not-empty)
-                 (gen/vector num-threads))]
-    (printf "\nStarting test iteration of %d repetitions with %d ops across %d threads:\n"
-            repetitions
-            (count (apply concat op-seqs))
-            (count op-seqs))
-      #_(run! prn op-seqs)
-    (loop [i 0]
-      (if (<= repetitions i)
-        true
-        (do
-          (println "\nTest repetition" (inc i))
-          (if (run-test-iteration constructor init-model context op-seqs search-threads on-stop)
-            (recur (inc i))
-            false))))))
+           concurrency 4
+           repetitions 5
+           search-threads (. (Runtime/getRuntime) availableProcessors)}
+      :as opts}]
+  {:pre [(fn? init-system) (fn? ctx->op-gens)]}
+  (ctest/testing message
+    (binding [report/*options* (merge report/*options* (:report opts))]
+      (report-test-summary
+        (check/check-and-report
+          iteration-opts
+          (gen-test-inputs
+            context-gen
+            (cond-> ctx->op-gens
+              (< 1 concurrency) (waitable-ops))
+            concurrency)
+          (fn [ctx op-seqs]
+            (let [model (init-model ctx)]
+              (run-trial!
+                repetitions
+                (partial run-test! init-system (:on-stop opts) model search-threads)
+                op-seqs))))))))

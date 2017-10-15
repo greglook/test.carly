@@ -92,19 +92,3 @@
   graph of possible futures."
   [world]
   [(:model world) (:pending world)])
-
-
-(defn run-linear
-  "Steps a world forward to completion along a linear track. Returns a valid
-  terminal world if the operations end in a valid state, otherwise nil. Calls
-  `f` with each world visited."
-  [world f]
-  (when world
-    (f world)
-    (if (end-of-line? world)
-      ; Made it to the end of the world line with consistent results.
-      world
-      ; Step world forward. A nil here means the next operation result
-      ; is invalid, so the observed worldline is inconsistent with the
-      ; model.
-      (recur (step world) f))))

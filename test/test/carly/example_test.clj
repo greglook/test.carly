@@ -5,10 +5,6 @@
     [test.carly.core :as carly :refer [defop]]))
 
 
-;; The simplest possible operation is one that has no settings, does nothing,
-;; does not affect the model, and performs no checking logic.
-(defop NoOp [])
-
 ;; Here we define a no-parameter operation which reads from the system. It does
 ;; not change the model state, but does check that the system returned the
 ;; expected results.
@@ -22,6 +18,7 @@
   (check
     [this model result]
     (is (= (not-empty (sort (keys model))) result))))
+
 
 ;; This operation specifies a key to lookup in the store, so it defines a
 ;; `gen-args` form. By returning a vector, the positional generators are used
@@ -40,6 +37,7 @@
   (check
     [this model result]
     (is (= (get model k) result))))
+
 
 ;; Put is a side-effecting entry, so it defines an `update-model` method. This
 ;; returns an updated version of the model state after applying the operation.
@@ -66,6 +64,7 @@
     [this model]
     (assoc model k v)))
 
+
 ;; Remove is also side-effecting, but does not define any checking logic. It
 ;; generates a map of args with a full generator expression, which is passed
 ;; to the record's map constructor.
@@ -88,8 +87,7 @@
 
 (def op-generators
   "Returns a vector of operation generators when called with the test context."
-  (juxt gen->NoOp
-        gen->ListKeys
+  (juxt gen->ListKeys
         gen->GetEntry
         gen->PutEntry
         gen->RemoveEntry))
@@ -101,20 +99,17 @@
   (gen/hash-map :keys (gen/set (gen/fmap (comp keyword str) gen/char-alpha) {:min-elements 1})))
 
 
-(deftest store-test
-  (carly/check-system
-    "basic store tests"
+(deftest linear-store-test
+  (carly/check-system "basic linear store tests" 100
     #(atom (sorted-map))
     op-generators
-    :context gen-context
-    :iterations 20))
+    :context-gen gen-context
+    :concurrency 1
+    :repetitions 1))
 
 
-(deftest ^:concurrent concurrent-test
-  (carly/check-system-concurrent
-    "concurrent store tests"
+(deftest ^:concurrent concurrent-store-test
+  (carly/check-system "concurrent store tests" 100
     #(atom (sorted-map))
     op-generators
-    :context gen-context
-    :iterations 10
-    :repetitions 5))
+    :context-gen gen-context))

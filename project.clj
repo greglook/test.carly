@@ -1,4 +1,4 @@
-(defproject mvxcvi/test.carly "0.4.0-SNAPSHOT"
+(defproject mvxcvi/test.carly "0.4.0"
   :description "Generative test harness for stateful system behavior."
   :url "https://github.com/greglook/test.carly"
   :license {:name "Public Domain"

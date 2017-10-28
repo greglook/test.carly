@@ -116,7 +116,7 @@
   "Construct a system, run a collection of op sequences on the system (possibly
   concurrently), and shut the system down. Returns a map from thread index to
   operations updated with results."
-  [constructor on-stop op-seqs]
+  [constructor finalize! op-seqs]
   (let [start (System/nanoTime)
         system (constructor)]
     (try
@@ -125,8 +125,8 @@
         1 {0 (op/apply-ops! system (first op-seqs))}
           (op/run-threads! system op-seqs))
       (finally
-        (when on-stop
-          (on-stop system))
+        (when finalize!
+          (finalize! system))
         (ctest/do-report
           {:type ::report/run-ops
            :op-count (reduce + 0 (map count op-seqs))
@@ -136,10 +136,10 @@
 
 (defn- run-test!
   "Runs a generative test iteration. Returns a test result map."
-  [constructor on-stop model thread-count op-seqs]
+  [constructor finalize! model thread-count op-seqs]
   (ctest/do-report
     {:type ::report/test-start})
-  (let [op-results (run-ops! constructor on-stop op-seqs)
+  (let [op-results (run-ops! constructor finalize! op-seqs)
         result (search/search-worldlines thread-count model op-results)]
     (ctest/do-report
       (assoc result :type (if (:world result)
@@ -201,8 +201,10 @@
     Generator for the operation test context.
   - `:init-model`
     Function which returns a fresh model when called with the context.
-  - `on-stop`
-    Side-effecting function to call on the system after testing.
+  - `finalize!`
+    Called with the system after running all operations. This function may
+    contain additional test assertions and should clean up any resources by
+    stopping the system.
   - `concurrency`
     Maximum number of operation threads to run in parallel.
   - `repetitions`
@@ -215,7 +217,7 @@
    iteration-opts
    init-system
    ctx->op-gens
-   & {:keys [context-gen init-model on-stop
+   & {:keys [context-gen init-model finalize!
              concurrency repetitions search-threads]
       :or {context-gen (gen/return {})
            init-model (constantly {})
@@ -244,5 +246,9 @@
                                     (init-system))))]
               (run-trial!
                 repetitions
-                (partial run-test! constructor on-stop model search-threads)
+                (partial run-test!
+                         constructor
+                         finalize!
+                         model
+                         search-threads)
                 op-seqs))))))))

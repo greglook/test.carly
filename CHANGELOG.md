@@ -7,7 +7,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-...
+### Changed
+- The `init-system` constructor passed to the test harness should now accept the
+  generated test context as an argument. This gives tests the opportunity to
+  preinitialize the system state using some attributes from the context.
 
 ## [0.4.0] - 2017-10-15
 

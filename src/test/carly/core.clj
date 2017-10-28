@@ -192,23 +192,31 @@
   "Uses generative tests to validate the behavior of a system under a linear
   sequence of operations.
 
-  Takes a test message, a no-arg constructor function which will produce a new
-  system for testing, and a function which will return a vector of operation
-  generators when called with the test context. The remaining options control
-  the behavior of the tests:
+  Takes a test message, a single-argument constructor function which takes the
+  context and produces a new system for testing, and a function which will
+  return a vector of operation generators when called with the test context.
+  The remaining options control the behavior of the tests:
 
-  - `on-stop`         side-effecting function to call on the system after testing
-  - `context-gen`     generator for the operation test context
-  - `init-model`      function which returns a fresh model when called with the context
-  - `concurrency`     maximum number of operation threads to run in parallel
-  - `repetitions`     number of times to run per generation to ensure repeatability
-  - `search-threads`  number of threads to run to search for valid worldlines
-  - `report`          options to override the default report configuration"
+  - `:context-gen`
+    Generator for the operation test context.
+  - `:init-model`
+    Function which returns a fresh model when called with the context.
+  - `on-stop`
+    Side-effecting function to call on the system after testing.
+  - `concurrency`
+    Maximum number of operation threads to run in parallel.
+  - `repetitions`
+    Number of times to run per generation to ensure repeatability.
+  - `search-threads`
+    Number of threads to run to search for valid worldlines.
+  - `report`
+    Options to override the default report configuration."
   [message
    iteration-opts
    init-system
    ctx->op-gens
-   & {:keys [context-gen init-model concurrency repetitions search-threads]
+   & {:keys [context-gen init-model on-stop
+             concurrency repetitions search-threads]
       :or {context-gen (gen/return {})
            init-model (constantly {})
            concurrency 4
@@ -227,8 +235,14 @@
               (< 1 concurrency) (waitable-ops))
             concurrency)
           (fn [ctx op-seqs]
-            (let [model (init-model ctx)]
+            (let [model (init-model ctx)
+                  constructor (fn system-constructor
+                                []
+                                (try
+                                  (init-system ctx)
+                                  (catch clojure.lang.ArityException ae
+                                    (init-system))))]
               (run-trial!
                 repetitions
-                (partial run-test! init-system (:on-stop opts) model search-threads)
+                (partial run-test! constructor on-stop model search-threads)
                 op-seqs))))))))

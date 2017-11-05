@@ -2865,42 +2865,8 @@ net.brehaut.ClojureTools = (function (SH) {
     build_tree: build_tree
   };
 })(SyntaxHighlighter);
-</script><title>mvxcvi/test.carly -- Marginalia</title></head><body><table><tr><td class="docs"><div class="header"><h1 class="project-name"><a href="https://github.com/greglook/test.carly">mvxcvi/test.carly</a></h1><h2 class="project-version">0.4.0</h2><br /><p>Generative test harness for stateful system behavior.</p>
-</div><div class="dependencies"><h3>dependencies</h3><table><tr><td class="dep-name">org.clojure/clojure</td><td class="dotted"><hr /></td><td class="dep-version">1.8.0</td></tr><tr><td class="dep-name">org.clojure/test.check</td><td class="dotted"><hr /></td><td class="dep-version">0.9.0</td></tr><tr><td class="dep-name">mvxcvi/puget</td><td class="dotted"><hr /></td><td class="dep-version">1.0.1</td></tr></table></div></td><td class="codes" style="text-align: center; vertical-align: middle;color: #666;padding-right:20px"><br /><br /><br />(this space intentionally left almost blank)</td></tr><tr><td class="docs"><div class="toc"><a name="toc"><h3>namespaces</h3></a><ul><li><a href="#test.carly.check">test.carly.check</a></li><li><a href="#test.carly.core">test.carly.core</a></li><li><a href="#test.carly.op">test.carly.op</a></li><li><a href="#test.carly.report">test.carly.report</a></li><li><a href="#test.carly.search">test.carly.search</a></li><li><a href="#test.carly.world">test.carly.world</a></li></ul></div></td><td class="codes">&nbsp;</td></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#test.carly.check" name="test.carly.check"><h1 class="project-name">test.carly.check</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>Integration code for wedding generative <code>test.check</code> functions and
-  <code>clojure.test</code> assertion macros.</p>
-</td><td class="codes"><pre class="brush: clojure">(ns test.carly.check
-  (:require
-    [clojure.test.check :as tc]
-    [clojure.test.check.clojure-test :as tcct]
-    [clojure.test.check.generators :as gen]))</pre></td></tr><tr><td class="docs"><p>Helper to produce a property by applying the test function to a realized
-  set of arguments from some bound generator. The function should accept a
-  context map and a collection of op sequences, and return a result map with a
-  <code>:world</code> entry containing a valid terminal world on success, or nil on
-  failure.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn- apply-test
-  [function]
-  (fn [args]
-    (try
-      (let [result (apply function args)]
-        {:result (boolean (:world result))
-         :function function
-         ; XXX: Super gross, but we need to do this to get result metadata
-         ; through for failing results until test.check 0.10.0. ಠ_ಠ
-         :args (vary-meta args assoc ::result result)})
-      (catch ThreadDeath td
-        (throw td))
-      (catch Throwable ex
-        {:result ex
-         :function function
-         :args args}))))</pre></td></tr><tr><td class="docs"><p>Apply generative tests to the given input generator and testing function,
-  returning a test.check summary.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn check-and-report
-  [opts gen-inputs f]
-  (let [opts (tcct/process-options opts)]
-    (apply tc/quick-check
-      (:num-tests opts 20)
-      (gen/fmap (apply-test f) gen-inputs)
-      (apply concat (dissoc opts :num-tests)))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#test.carly.core" name="test.carly.core"><h1 class="project-name">test.carly.core</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>Suite of tests to verify that a given system implementation conforms to the
+</script><title>mvxcvi/test.carly -- Marginalia</title></head><body><table><tr><td class="docs"><div class="header"><h1 class="project-name"><a href="https://github.com/greglook/test.carly">mvxcvi/test.carly</a></h1><h2 class="project-version">0.4.1</h2><br /><p>Generative test harness for stateful system behavior.</p>
+</div><div class="dependencies"><h3>dependencies</h3><table><tr><td class="dep-name">org.clojure/clojure</td><td class="dotted"><hr /></td><td class="dep-version">1.8.0</td></tr><tr><td class="dep-name">org.clojure/test.check</td><td class="dotted"><hr /></td><td class="dep-version">0.9.0</td></tr><tr><td class="dep-name">mvxcvi/puget</td><td class="dotted"><hr /></td><td class="dep-version">1.0.2</td></tr></table></div></td><td class="codes" style="text-align: center; vertical-align: middle;color: #666;padding-right:20px"><br /><br /><br />(this space intentionally left almost blank)</td></tr><tr><td class="docs"><div class="toc"><a name="toc"><h3>namespaces</h3></a><ul><li><a href="#test.carly.core">test.carly.core</a></li><li><a href="#test.carly.search">test.carly.search</a></li><li><a href="#test.carly.op">test.carly.op</a></li><li><a href="#test.carly.world">test.carly.world</a></li><li><a href="#test.carly.check">test.carly.check</a></li><li><a href="#test.carly.report">test.carly.report</a></li></ul></div></td><td class="codes">&nbsp;</td></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#test.carly.core" name="test.carly.core"><h1 class="project-name">test.carly.core</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>Suite of tests to verify that a given system implementation conforms to the
   spec during a sequence of operations performed on it.</p>
 </td><td class="codes"><pre class="brush: clojure">(ns test.carly.core
   (:require
@@ -2988,7 +2954,7 @@ net.brehaut.ClojureTools = (function (SH) {
   concurrently), and shut the system down. Returns a map from thread index to
   operations updated with results.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn- run-ops!
-  [constructor on-stop op-seqs]
+  [constructor finalize! op-seqs]
   (let [start (System/nanoTime)
         system (constructor)]
     (try
@@ -2997,18 +2963,18 @@ net.brehaut.ClojureTools = (function (SH) {
         1 {0 (op/apply-ops! system (first op-seqs))}
           (op/run-threads! system op-seqs))
       (finally
-        (when on-stop
-          (on-stop system))
+        (when finalize!
+          (finalize! system))
         (ctest/do-report
           {:type ::report/run-ops
            :op-count (reduce + 0 (map count op-seqs))
            :concurrency (count op-seqs)
            :elapsed (elapsed-since start)})))))</pre></td></tr><tr><td class="docs"><p>Runs a generative test iteration. Returns a test result map.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn- run-test!
-  [constructor on-stop model thread-count op-seqs]
+  [constructor finalize! model thread-count op-seqs]
   (ctest/do-report
     {:type ::report/test-start})
-  (let [op-results (run-ops! constructor on-stop op-seqs)
+  (let [op-results (run-ops! constructor finalize! op-seqs)
         result (search/search-worldlines thread-count model op-results)]
     (ctest/do-report
       (assoc result :type (if (:world result)
@@ -3051,26 +3017,36 @@ net.brehaut.ClojureTools = (function (SH) {
              :shrunk-result (::check/result (meta (get-in summary [:shrunk :smallest])))))))</pre></td></tr><tr><td class="docs"><p>Uses generative tests to validate the behavior of a system under a linear
   sequence of operations.</p>
 
-<p>  Takes a test message, a no-arg constructor function which will produce a new
-  system for testing, and a function which will return a vector of operation
-  generators when called with the test context. The remaining options control
-  the behavior of the tests:</p>
+<p>  Takes a test message, a single-argument constructor function which takes the
+  context and produces a new system for testing, and a function which will
+  return a vector of operation generators when called with the test context.
+  The remaining options control the behavior of the tests:</p>
 
 <ul>
-<li><code>on-stop</code>         side-effecting function to call on the system after testing</li>
-<li><code>context-gen</code>     generator for the operation test context</li>
-<li><code>init-model</code>      function which returns a fresh model when called with the context</li>
-<li><code>concurrency</code>     maximum number of operation threads to run in parallel</li>
-<li><code>repetitions</code>     number of times to run per generation to ensure repeatability</li>
-<li><code>search-threads</code>  number of threads to run to search for valid worldlines</li>
-<li><code>report</code>          options to override the default report configuration</li>
+<li><code>:context-gen</code>
+Generator for the operation test context.</li>
+<li><code>:init-model</code>
+Function which returns a fresh model when called with the context.</li>
+<li><code>finalize!</code>
+Called with the system after running all operations. This function may
+contain additional test assertions and should clean up any resources by
+stopping the system.</li>
+<li><code>concurrency</code>
+Maximum number of operation threads to run in parallel.</li>
+<li><code>repetitions</code>
+Number of times to run per generation to ensure repeatability.</li>
+<li><code>search-threads</code>
+Number of threads to run to search for valid worldlines.</li>
+<li><code>report</code>
+Options to override the default report configuration.</li>
 </ul>
 </td><td class="codes"><pre class="brush: clojure">(defn check-system
   [message
    iteration-opts
    init-system
    ctx-&gt;op-gens
-   &amp; {:keys [context-gen init-model concurrency repetitions search-threads]
+   &amp; {:keys [context-gen init-model finalize!
+             concurrency repetitions search-threads]
       :or {context-gen (gen/return {})
            init-model (constantly {})
            concurrency 4
@@ -3089,11 +3065,128 @@ net.brehaut.ClojureTools = (function (SH) {
               (&lt; 1 concurrency) (waitable-ops))
             concurrency)
           (fn [ctx op-seqs]
-            (let [model (init-model ctx)]
+            (let [model (init-model ctx)
+                  constructor (fn system-constructor
+                                []
+                                (try
+                                  (init-system ctx)
+                                  (catch clojure.lang.ArityException ae
+                                    (init-system))))]
               (run-trial!
                 repetitions
-                (partial run-test! init-system (:on-stop opts) model search-threads)
-                op-seqs))))))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#test.carly.op" name="test.carly.op"><h1 class="project-name">test.carly.op</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>Test operations and related functionality.</p>
+                (partial run-test!
+                         constructor
+                         finalize!
+                         model
+                         search-threads)
+                op-seqs))))))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#test.carly.search" name="test.carly.search"><h1 class="project-name">test.carly.search</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>Functions for running concurrent workers to search for valid worldlines.</p>
+</td><td class="codes"><pre class="brush: clojure">(ns test.carly.search
+  (:require
+    [clojure.test :as ctest]
+    [test.carly.world :as world])
+  (:import
+    (java.util.concurrent
+      PriorityBlockingQueue
+      TimeUnit)))</pre></td></tr><tr><td class="docs"><p>Ranks two worlds by the number of possible futures they have. Worlds with
+  fewer futures will rank earlier.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn- compare-futures
+  [a b]
+  (compare (:futures a) (:futures b)))</pre></td></tr><tr><td class="docs"><p>Steps a world forward to completion along a linear track. Returns a valid
+  terminal world if the operations end in a valid state, otherwise nil. Calls
+  <code>f</code> with each world visited.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn- run-linear
+  [world f]
+  (when world
+    (f world)
+    (if (world/end-of-line? world)
+      ; Made it to the end of the world line with consistent results.
+      world
+      ; Step world forward. A nil here means the next operation result
+      ; is invalid, so the observed worldline is inconsistent with the
+      ; model.
+      (recur (world/step world) f))))</pre></td></tr><tr><td class="docs"><p>Poll the queue for a world, calculate next states, and add valid ones back
+  into the queue. The <code>result</code> promise will be delivered with the first valid
+  terminal world found. Once <code>result</code> has been realized, the loop will exit.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn- spawn-worker!
+  [^PriorityBlockingQueue queue report-fn visited result]
+  (future
+    (loop []
+      (when-not (realized? result)
+        (if-let [world (.poll queue 100 TimeUnit/MILLISECONDS)]
+          (let [mark-visited! #(swap! visited conj (world/visit-key %))
+                visited? #(contains? @visited (world/visit-key %))]
+            (when-not (visited? world)
+              ; Add world to visited set.
+              (mark-visited! world)
+              ; Compute steps.
+              (binding [ctest/report report-fn]
+                (if (&lt;= (:futures world) 1)
+                  ; Optimization to run the linear sequence directly when there is only one
+                  ; possible future worldline.
+                  (when-let [end (run-linear world mark-visited!)]
+                    (deliver result end))
+                  ; Otherwise, calculate the next possible states and add any unvisited
+                  ; ones to the queue.
+                  (-&gt;&gt; (world/next-steps world)
+                       (remove visited?)
+                       (run! #(.offer queue %))))))
+            (recur))
+          ; Didn't find a world; if the queue is still empty, deliver nil.
+          (when (empty? queue)
+            (deliver result nil)))))))</pre></td></tr><tr><td class="docs"><p>Run a collection of worker threads to consume the given queue of worlds.
+  Blocks and returns the first valid world found, or nil, once all the threads
+  have terminated.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn- run-workers!
+  [n queue report-fn visited]
+  (when-not (empty? queue)
+    (let [result (promise)
+          workers (repeatedly n #(spawn-worker! queue report-fn visited result))]
+      (dorun workers)
+      (run! deref workers)
+      @result)))</pre></td></tr><tr><td class="docs"><p>Run a world directly on-thread to perform a linear search. Only appropriate
+  when the world has a single worldline left.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn- linear-search
+  [origin]
+  (let [visited (volatile! 0)
+        reports (volatile! [])
+        start (System/nanoTime)
+        valid-world (binding [ctest/report #(vswap! reports conj %)]
+                      (run-linear origin (fn [world] (vswap! visited inc))))
+        elapsed (/ (- (System/nanoTime) start) 1000000.0)]
+    {:world valid-world
+     :threads 1
+     :futures 1
+     :visited @visited
+     :reports @reports
+     :elapsed elapsed}))</pre></td></tr><tr><td class="docs"><p>Run up to <code>thread-count</code> worker threads to search through worldlines
+  starting from the given <code>origin</code> world to find valid linearizations of the
+  pending operations.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn- parallel-search
+  [origin thread-count]
+  (let [visited (atom #{})
+        reports (atom [])
+        queue (doto (PriorityBlockingQueue. 20 compare-futures)
+                (.offer origin))
+        start (System/nanoTime)
+        valid-world (run-workers! thread-count queue (partial swap! reports conj) visited)
+        elapsed (/ (- (System/nanoTime) start) 1000000.0)]
+      {:world valid-world
+       :threads thread-count
+       :futures (:futures origin)
+       :visited (count @visited)
+       :reports @reports
+       :elapsed elapsed}))</pre></td></tr><tr><td class="docs"><p>Run up to <code>thread-count</code> worker threads to search through worldlines
+  starting from the given <code>model</code> to find valid linearizations of the
+  <code>thread-results</code>.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn search-worldlines
+  [thread-count model thread-results]
+  (when (empty? thread-results)
+    (throw (RuntimeException.
+             &quot;Cannot search the worldless void (thread results were empty)&quot;)))
+  (let [origin (world/initialize model thread-results)]
+    (if (= 1 (:futures origin))
+      (linear-search origin)
+      (parallel-search origin thread-count))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#test.carly.op" name="test.carly.op"><h1 class="project-name">test.carly.op</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>Test operations and related functionality.</p>
 </td><td class="codes"><pre class="brush: clojure">(ns test.carly.op)</pre></td></tr><tr><td class="docs"><p>Protocol for a test operation on a system.</p>
 </td><td class="codes"><pre class="brush: clojure">(defprotocol TestOperation
   (apply-op
@@ -3133,7 +3226,107 @@ net.brehaut.ClojureTools = (function (SH) {
     ; TODO: timeout on deref?
     (-&gt;&gt; (map deref threads)
          (map vector (range))
-         (into {}))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#test.carly.report" name="test.carly.report"><h1 class="project-name">test.carly.report</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>Integration code for wedding generative <code>test.check</code> functions and
+         (into {}))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#test.carly.world" name="test.carly.world"><h1 class="project-name">test.carly.world</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>Record and functions for simulating world states. Each world is represented
+  by an immutable map containing the model state, current history, and map of
+  pending thread operations.</p>
+</td><td class="codes"><pre class="brush: clojure">(ns test.carly.world
+  (:require
+    [test.carly.op :as op]))</pre></td></tr><tr><td class="docs"><p>A world represents a point in time along a possible history. The <code>model</code>
+holds the current representation of the system, the <code>history</code> is the
+sequence of operations which have already happened, and <code>pending</code> is a map
+from thread ids to lists of pending operations for each thread.</p>
+</td><td class="codes"><pre class="brush: clojure">(defrecord World
+  [model history pending futures])</pre></td></tr><tr><td class="docs"><p>Determine whether the worldline has ended.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn end-of-line?
+  [world]
+  (empty? (:pending world)))</pre></td></tr><tr><td class="docs"><p>Get the next pending operation for the identified thread, if any.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn- peek-pending
+  [pending thread-id]
+  (first (get pending thread-id)))</pre></td></tr><tr><td class="docs"><p>Remove the next pending operation for the identified thread. Returns an
+  updated map with the remaining ops, or without the thread if no ops were left.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn- pop-pending
+  [pending thread-id]
+  (let [[_ &amp; more] (get pending thread-id)]
+    (if (seq more)
+      (assoc pending thread-id more)
+      (dissoc pending thread-id))))</pre></td></tr><tr><td class="docs"><p>Calculate the number of possible futures a world has based on a map of thread
+  ids to pending operations.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn- future-count
+  [pending]
+  (if (&lt;= (count pending) 1)
+    1
+    (let [fact (fn fact [n] (reduce * 1N (map inc (range n))))
+          op-counts (map count (vals pending))]
+      (apply / (fact (reduce + op-counts)) (map fact op-counts)))))</pre></td></tr><tr><td class="docs"><p>Initialize a new world state given the initial model and a map of pending
+  operations.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn initialize
+  [model pending]
+  (map-&gt;World
+    {:model model
+     :history []
+     :pending pending
+     :futures (future-count pending)}))</pre></td></tr><tr><td class="docs"><p>Compute a step by applying the next operation from the identified thread to
+  the world. Returns an updated world state, or nil if the operation result was
+  invalid.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn step
+  ([world]
+   (step world (first (keys (:pending world)))))
+  ([world thread-id]
+   (let [op (peek-pending (:pending world) thread-id)]
+     (when-not op
+       (throw (IllegalStateException.
+                (format &quot;Cannot step thread %d - no ops pending&quot; thread-id))))
+     (when-not (contains? op ::op/result)
+       (throw (IllegalStateException.
+                (format &quot;Cannot step op %s with no result&quot; (pr-str op)))))
+     (when (op/check op (:model world) (::op/result op))
+       (-&gt; world
+           (update :model (partial op/update-model op))
+           (update :history conj (assoc op ::thread thread-id))
+           (update :pending pop-pending thread-id)
+           (as-&gt; w (assoc w :futures (future-count (:pending w)))))))))</pre></td></tr><tr><td class="docs"><p>Compute all possible valid next steps for the world, returning a sequence of
+  new world states.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn next-steps
+  [world]
+  (keep (partial step world) (keys (:pending world))))</pre></td></tr><tr><td class="docs"><p>Return the key used to compare worlds which are equivalent nodes in the
+  graph of possible futures.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn visit-key
+  [world]
+  [(:model world) (:pending world)])</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#test.carly.check" name="test.carly.check"><h1 class="project-name">test.carly.check</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>Integration code for wedding generative <code>test.check</code> functions and
+  <code>clojure.test</code> assertion macros.</p>
+</td><td class="codes"><pre class="brush: clojure">(ns test.carly.check
+  (:require
+    [clojure.test.check :as tc]
+    [clojure.test.check.clojure-test :as tcct]
+    [clojure.test.check.generators :as gen]))</pre></td></tr><tr><td class="docs"><p>Helper to produce a property by applying the test function to a realized
+  set of arguments from some bound generator. The function should accept a
+  context map and a collection of op sequences, and return a result map with a
+  <code>:world</code> entry containing a valid terminal world on success, or nil on
+  failure.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn- apply-test
+  [function]
+  (fn [args]
+    (try
+      (let [result (apply function args)]
+        {:result (boolean (:world result))
+         :function function
+         ; XXX: Super gross, but we need to do this to get result metadata
+         ; through for failing results until test.check 0.10.0. ಠ_ಠ
+         :args (vary-meta args assoc ::result result)})
+      (catch ThreadDeath td
+        (throw td))
+      (catch Throwable ex
+        {:result ex
+         :function function
+         :args args}))))</pre></td></tr><tr><td class="docs"><p>Apply generative tests to the given input generator and testing function,
+  returning a test.check summary.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn check-and-report
+  [opts gen-inputs f]
+  (let [opts (tcct/process-options opts)]
+    (apply tc/quick-check
+      (:num-tests opts 20)
+      (gen/fmap (apply-test f) gen-inputs)
+      (apply concat (dissoc opts :num-tests)))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#test.carly.report" name="test.carly.report"><h1 class="project-name">test.carly.report</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>Integration code for wedding generative <code>test.check</code> functions and
   <code>clojure.test</code> assertion macros.</p>
 </td><td class="codes"><pre class="brush: clojure">(ns test.carly.report
   (:require
@@ -3376,180 +3569,7 @@ unsuccessful.</p>
      (publish! reports#)
      (if (empty? reports#)
        result#
-       (not (some (comp #{:fail :error} :type) reports#)))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#test.carly.search" name="test.carly.search"><h1 class="project-name">test.carly.search</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>Functions for running concurrent workers to search for valid worldlines.</p>
-</td><td class="codes"><pre class="brush: clojure">(ns test.carly.search
-  (:require
-    [clojure.test :as ctest]
-    [test.carly.world :as world])
-  (:import
-    (java.util.concurrent
-      PriorityBlockingQueue
-      TimeUnit)))</pre></td></tr><tr><td class="docs"><p>Ranks two worlds by the number of possible futures they have. Worlds with
-  fewer futures will rank earlier.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn- compare-futures
-  [a b]
-  (compare (:futures a) (:futures b)))</pre></td></tr><tr><td class="docs"><p>Steps a world forward to completion along a linear track. Returns a valid
-  terminal world if the operations end in a valid state, otherwise nil. Calls
-  <code>f</code> with each world visited.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn- run-linear
-  [world f]
-  (when world
-    (f world)
-    (if (world/end-of-line? world)
-      ; Made it to the end of the world line with consistent results.
-      world
-      ; Step world forward. A nil here means the next operation result
-      ; is invalid, so the observed worldline is inconsistent with the
-      ; model.
-      (recur (world/step world) f))))</pre></td></tr><tr><td class="docs"><p>Poll the queue for a world, calculate next states, and add valid ones back
-  into the queue. The <code>result</code> promise will be delivered with the first valid
-  terminal world found. Once <code>result</code> has been realized, the loop will exit.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn- spawn-worker!
-  [^PriorityBlockingQueue queue report-fn visited result]
-  (future
-    (loop []
-      (when-not (realized? result)
-        (if-let [world (.poll queue 100 TimeUnit/MILLISECONDS)]
-          (let [mark-visited! #(swap! visited conj (world/visit-key %))
-                visited? #(contains? @visited (world/visit-key %))]
-            (when-not (visited? world)
-              ; Add world to visited set.
-              (mark-visited! world)
-              ; Compute steps.
-              (binding [ctest/report report-fn]
-                (if (&lt;= (:futures world) 1)
-                  ; Optimization to run the linear sequence directly when there is only one
-                  ; possible future worldline.
-                  (when-let [end (run-linear world mark-visited!)]
-                    (deliver result end))
-                  ; Otherwise, calculate the next possible states and add any unvisited
-                  ; ones to the queue.
-                  (-&gt;&gt; (world/next-steps world)
-                       (remove visited?)
-                       (run! #(.offer queue %))))))
-            (recur))
-          ; Didn't find a world; if the queue is still empty, deliver nil.
-          (when (empty? queue)
-            (deliver result nil)))))))</pre></td></tr><tr><td class="docs"><p>Run a collection of worker threads to consume the given queue of worlds.
-  Blocks and returns the first valid world found, or nil, once all the threads
-  have terminated.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn- run-workers!
-  [n queue report-fn visited]
-  (when-not (empty? queue)
-    (let [result (promise)
-          workers (repeatedly n #(spawn-worker! queue report-fn visited result))]
-      (dorun workers)
-      (run! deref workers)
-      @result)))</pre></td></tr><tr><td class="docs"><p>Run a world directly on-thread to perform a linear search. Only appropriate
-  when the world has a single worldline left.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn- linear-search
-  [origin]
-  (let [visited (volatile! 0)
-        reports (volatile! [])
-        start (System/nanoTime)
-        valid-world (binding [ctest/report #(vswap! reports conj %)]
-                      (run-linear origin (fn [world] (vswap! visited inc))))
-        elapsed (/ (- (System/nanoTime) start) 1000000.0)]
-    {:world valid-world
-     :threads 1
-     :futures 1
-     :visited @visited
-     :reports @reports
-     :elapsed elapsed}))</pre></td></tr><tr><td class="docs"><p>Run up to <code>thread-count</code> worker threads to search through worldlines
-  starting from the given <code>origin</code> world to find valid linearizations of the
-  pending operations.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn- parallel-search
-  [origin thread-count]
-  (let [visited (atom #{})
-        reports (atom [])
-        queue (doto (PriorityBlockingQueue. 20 compare-futures)
-                (.offer origin))
-        start (System/nanoTime)
-        valid-world (run-workers! thread-count queue (partial swap! reports conj) visited)
-        elapsed (/ (- (System/nanoTime) start) 1000000.0)]
-      {:world valid-world
-       :threads thread-count
-       :futures (:futures origin)
-       :visited (count @visited)
-       :reports @reports
-       :elapsed elapsed}))</pre></td></tr><tr><td class="docs"><p>Run up to <code>thread-count</code> worker threads to search through worldlines
-  starting from the given <code>model</code> to find valid linearizations of the
-  <code>thread-results</code>.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn search-worldlines
-  [thread-count model thread-results]
-  (when (empty? thread-results)
-    (throw (RuntimeException.
-             &quot;Cannot search the worldless void (thread results were empty)&quot;)))
-  (let [origin (world/initialize model thread-results)]
-    (if (= 1 (:futures origin))
-      (linear-search origin)
-      (parallel-search origin thread-count))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#test.carly.world" name="test.carly.world"><h1 class="project-name">test.carly.world</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>Record and functions for simulating world states. Each world is represented
-  by an immutable map containing the model state, current history, and map of
-  pending thread operations.</p>
-</td><td class="codes"><pre class="brush: clojure">(ns test.carly.world
-  (:require
-    [test.carly.op :as op]))</pre></td></tr><tr><td class="docs"><p>A world represents a point in time along a possible history. The <code>model</code>
-holds the current representation of the system, the <code>history</code> is the
-sequence of operations which have already happened, and <code>pending</code> is a map
-from thread ids to lists of pending operations for each thread.</p>
-</td><td class="codes"><pre class="brush: clojure">(defrecord World
-  [model history pending futures])</pre></td></tr><tr><td class="docs"><p>Determine whether the worldline has ended.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn end-of-line?
-  [world]
-  (empty? (:pending world)))</pre></td></tr><tr><td class="docs"><p>Get the next pending operation for the identified thread, if any.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn- peek-pending
-  [pending thread-id]
-  (first (get pending thread-id)))</pre></td></tr><tr><td class="docs"><p>Remove the next pending operation for the identified thread. Returns an
-  updated map with the remaining ops, or without the thread if no ops were left.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn- pop-pending
-  [pending thread-id]
-  (let [[_ &amp; more] (get pending thread-id)]
-    (if (seq more)
-      (assoc pending thread-id more)
-      (dissoc pending thread-id))))</pre></td></tr><tr><td class="docs"><p>Calculate the number of possible futures a world has based on a map of thread
-  ids to pending operations.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn- future-count
-  [pending]
-  (if (&lt;= (count pending) 1)
-    1
-    (let [fact (fn fact [n] (reduce * 1N (map inc (range n))))
-          op-counts (map count (vals pending))]
-      (apply / (fact (reduce + op-counts)) (map fact op-counts)))))</pre></td></tr><tr><td class="docs"><p>Initialize a new world state given the initial model and a map of pending
-  operations.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn initialize
-  [model pending]
-  (map-&gt;World
-    {:model model
-     :history []
-     :pending pending
-     :futures (future-count pending)}))</pre></td></tr><tr><td class="docs"><p>Compute a step by applying the next operation from the identified thread to
-  the world. Returns an updated world state, or nil if the operation result was
-  invalid.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn step
-  ([world]
-   (step world (first (keys (:pending world)))))
-  ([world thread-id]
-   (let [op (peek-pending (:pending world) thread-id)]
-     (when-not op
-       (throw (IllegalStateException.
-                (format &quot;Cannot step thread %d - no ops pending&quot; thread-id))))
-     (when-not (contains? op ::op/result)
-       (throw (IllegalStateException.
-                (format &quot;Cannot step op %s with no result&quot; (pr-str op)))))
-     (when (op/check op (:model world) (::op/result op))
-       (-&gt; world
-           (update :model (partial op/update-model op))
-           (update :history conj (assoc op ::thread thread-id))
-           (update :pending pop-pending thread-id)
-           (as-&gt; w (assoc w :futures (future-count (:pending w)))))))))</pre></td></tr><tr><td class="docs"><p>Compute all possible valid next steps for the world, returning a sequence of
-  new world states.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn next-steps
-  [world]
-  (keep (partial step world) (keys (:pending world))))</pre></td></tr><tr><td class="docs"><p>Return the key used to compare worlds which are equivalent nodes in the
-  graph of possible futures.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn visit-key
-  [world]
-  [(:model world) (:pending world)])</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/gdeer81/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_test.carly.check">test.carly.check</li><li class="floating-toc-li" id="floating-toc_test.carly.core">test.carly.core</li><li class="floating-toc-li" id="floating-toc_test.carly.op">test.carly.op</li><li class="floating-toc-li" id="floating-toc_test.carly.report">test.carly.report</li><li class="floating-toc-li" id="floating-toc_test.carly.search">test.carly.search</li><li class="floating-toc-li" id="floating-toc_test.carly.world">test.carly.world</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
+       (not (some (comp #{:fail :error} :type) reports#)))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/gdeer81/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_test.carly.core">test.carly.core</li><li class="floating-toc-li" id="floating-toc_test.carly.search">test.carly.search</li><li class="floating-toc-li" id="floating-toc_test.carly.op">test.carly.op</li><li class="floating-toc-li" id="floating-toc_test.carly.world">test.carly.world</li><li class="floating-toc-li" id="floating-toc_test.carly.check">test.carly.check</li><li class="floating-toc-li" id="floating-toc_test.carly.report">test.carly.report</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
 SyntaxHighlighter.all();
 
 // hackity hack

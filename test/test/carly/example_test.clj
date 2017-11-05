@@ -109,7 +109,9 @@
 
 
 (deftest ^:concurrent concurrent-store-test
-  (carly/check-system "concurrent store tests" 100
+  (carly/check-system "concurrent store tests" 20
     #(atom (sorted-map))
     op-generators
-    :context-gen gen-context))
+    :context-gen gen-context
+    :concurrency 4
+    :repetitions 3))

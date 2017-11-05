@@ -2,6 +2,7 @@ test.carly
 ==========
 
 [![CircleCI](https://circleci.com/gh/greglook/test.carly.svg?style=shield&circle-token=7b6c20133b5fcbb2cc5d0db564bf1742cf5f3cbd)](https://circleci.com/gh/greglook/test.carly)
+[![codecov](https://codecov.io/gh/greglook/test.carly/branch/develop/graph/badge.svg)](https://codecov.io/gh/greglook/test.carly)
 [![API documentation](https://img.shields.io/badge/doc-API-blue.svg)](https://greglook.github.io/test.carly/api/)
 [![Literate documentation](https://img.shields.io/badge/doc-marginalia-blue.svg)](https://greglook.github.io/test.carly/marginalia/uberdoc.html)
 

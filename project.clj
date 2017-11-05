@@ -4,13 +4,16 @@
   :license {:name "Public Domain"
             :url "http://unlicense.org/"}
 
+  :aliases
+  {"coverage" ["with-profile" "+coverage" "cloverage"]}
+
   :deploy-branches ["master"]
   :pedantic? :abort
 
   :dependencies
   [[org.clojure/clojure "1.8.0"]
    [org.clojure/test.check "0.9.0"]
-   [mvxcvi/puget "1.0.1"]]
+   [mvxcvi/puget "1.0.2"]]
 
   :test-selectors
   {:default (complement :concurrent)
@@ -25,4 +28,8 @@
   :codox
   {:metadata {:doc/format :markdown}
    :source-uri "https://github.com/greglook/test.carly/blob/master/{filepath}#L{line}"
-   :output-path "target/doc/api"})
+   :output-path "target/doc/api"}
+
+  :profiles
+  {:coverage
+   {:plugins [[lein-cloverage "1.0.10"]]}})

@@ -7,6 +7,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+...
+
+## [0.4.1] - 2017-11-04
+
 ### Changed
 - The `init-system` constructor passed to the test harness should now accept the
   generated test context as an argument. This gives tests the opportunity to
@@ -49,7 +53,8 @@ worlds (those with fewer possible futures) searched first.
 
 Initial project release.
 
-[Unreleased]: https://github.com/greglook/test.carly/compare/0.4.0...HEAD
+[Unreleased]: https://github.com/greglook/test.carly/compare/0.4.1...HEAD
+[0.4.1]: https://github.com/greglook/test.carly/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/greglook/test.carly/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/greglook/test.carly/compare/0.2.0...0.3.0
 [0.2.0]: https://github.com/greglook/test.carly/compare/0.1.0...0.2.0
